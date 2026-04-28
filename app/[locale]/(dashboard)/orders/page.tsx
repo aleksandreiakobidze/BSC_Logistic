@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/app/status-badge";
 import { EmptyState } from "@/components/app/empty-state";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { NewOrderButton } from "./new-order-button";
+import { ExportButton } from "@/components/app/export-button";
 
 export default async function OrdersPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -29,7 +30,15 @@ export default async function OrdersPage({ params }: { params: Promise<{ locale:
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("orders.title")} actions={<NewOrderButton customers={customers} />} />
+      <PageHeader
+        title={t("orders.title")}
+        actions={
+          <>
+            <ExportButton entity="orders" />
+            <NewOrderButton customers={customers} />
+          </>
+        }
+      />
 
       {orders.length === 0 ? (
         <EmptyState

@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatCurrency } from "@/lib/utils";
 import { EmptyState } from "@/components/app/empty-state";
 import { NewCustomerButton } from "./new-customer-button";
+import { ExportButton } from "@/components/app/export-button";
 
 export default async function CustomersPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -26,7 +27,12 @@ export default async function CustomersPage({ params }: { params: Promise<{ loca
     <div className="space-y-6">
       <PageHeader
         title={t("customers.title")}
-        actions={<NewCustomerButton />}
+        actions={
+          <>
+            <ExportButton entity="customers" />
+            <NewCustomerButton />
+          </>
+        }
       />
 
       {customers.length === 0 ? (

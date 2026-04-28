@@ -16,6 +16,7 @@ import {
 import { EmptyState } from "@/components/app/empty-state";
 import { LeadStatusBadge } from "@/components/app/lead-status-badge";
 import { NewLeadButton } from "./new-lead-button";
+import { ExportButton } from "@/components/app/export-button";
 import { formatCurrency } from "@/lib/utils";
 import { format } from "date-fns";
 
@@ -77,7 +78,12 @@ export default async function LeadsPage({
       <PageHeader
         title={t("leads.title")}
         description={t("leads.description")}
-        actions={<NewLeadButton />}
+        actions={
+          <>
+            <ExportButton entity="leads" />
+            <NewLeadButton />
+          </>
+        }
       />
 
       {/* Pipeline summary */}

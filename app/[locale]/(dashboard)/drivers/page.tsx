@@ -9,6 +9,7 @@ import { StatusBadge } from "@/components/app/status-badge";
 import { EmptyState } from "@/components/app/empty-state";
 import { formatDate } from "@/lib/utils";
 import { NewDriverButton } from "./new-driver-button";
+import { ExportButton } from "@/components/app/export-button";
 
 export default async function DriversPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -24,7 +25,15 @@ export default async function DriversPage({ params }: { params: Promise<{ locale
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("drivers.title")} actions={<NewDriverButton />} />
+      <PageHeader
+        title={t("drivers.title")}
+        actions={
+          <>
+            <ExportButton entity="drivers" />
+            <NewDriverButton />
+          </>
+        }
+      />
 
       {drivers.length === 0 ? (
         <EmptyState

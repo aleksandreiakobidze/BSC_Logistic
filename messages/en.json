@@ -74,7 +74,9 @@
     "country": "Country",
     "notes": "Notes",
     "dashboard": "Dashboard",
+    "export": "Export",
     "exportCsv": "Export CSV",
+    "exportExcel": "Export Excel",
     "exportPdf": "Export PDF",
     "error": "An error occurred"
   },
@@ -277,5 +279,5 @@
     "position": "Position",
     "customer": "Customer",
     "selectCustomer": "Select customer"
-  },
+  }
 }

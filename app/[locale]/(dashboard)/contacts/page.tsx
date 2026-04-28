@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/table";
 import { EmptyState } from "@/components/app/empty-state";
 import { NewContactButton } from "./new-contact-button";
+import { ExportButton } from "@/components/app/export-button";
 import Link from "next/link";
 
 export default async function ContactsPage({
@@ -63,7 +64,12 @@ export default async function ContactsPage({
       <PageHeader
         title={t("contacts.title")}
         description={t("contacts.description")}
-        actions={<NewContactButton customers={customers} />}
+        actions={
+          <>
+            <ExportButton entity="contacts" />
+            <NewContactButton customers={customers} />
+          </>
+        }
       />
 
       {contacts.length === 0 ? (

@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { EmptyState } from "@/components/app/empty-state";
+import { ExportButton } from "@/components/app/export-button";
 
 export default async function ExpensesPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -23,7 +24,11 @@ export default async function ExpensesPage({ params }: { params: Promise<{ local
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("nav.expenses")} description={`Total: ${formatCurrency(total, "USD", locale)}`} />
+      <PageHeader
+        title={t("nav.expenses")}
+        description={`Total: ${formatCurrency(total, "USD", locale)}`}
+        actions={<ExportButton entity="expenses" />}
+      />
 
       {expenses.length === 0 ? (
         <EmptyState icon={Receipt} title="No expenses logged" />

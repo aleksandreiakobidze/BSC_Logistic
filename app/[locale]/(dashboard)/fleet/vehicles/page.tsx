@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { StatusBadge } from "@/components/app/status-badge";
 import { EmptyState } from "@/components/app/empty-state";
 import { NewVehicleButton } from "./new-vehicle-button";
+import { ExportButton } from "@/components/app/export-button";
 
 export default async function VehiclesPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -22,7 +23,15 @@ export default async function VehiclesPage({ params }: { params: Promise<{ local
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("fleet.title")} actions={<NewVehicleButton />} />
+      <PageHeader
+        title={t("fleet.title")}
+        actions={
+          <>
+            <ExportButton entity="vehicles" />
+            <NewVehicleButton />
+          </>
+        }
+      />
 
       {vehicles.length === 0 ? (
         <EmptyState

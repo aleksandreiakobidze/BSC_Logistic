@@ -1,12 +1,11 @@
-import Link from "next/link";
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/db";
 import { requireOrg } from "@/lib/actions";
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
 import { RevenueChart, UtilizationChart } from "./reports-charts";
+import { ExportButton } from "@/components/app/export-button";
 
 export default async function ReportsPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -59,13 +58,7 @@ export default async function ReportsPage({ params }: { params: Promise<{ locale
     <div className="space-y-6">
       <PageHeader
         title={t("reports.title")}
-        actions={
-          <>
-            <Button variant="outline" asChild>
-              <Link href="/api/reports/shipments.csv" target="_blank">{t("common.exportCsv")}</Link>
-            </Button>
-          </>
-        }
+        actions={<ExportButton entity="shipments" />}
       />
 
       <div className="grid gap-4 lg:grid-cols-2">

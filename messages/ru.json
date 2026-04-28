@@ -74,7 +74,9 @@
     "country": "Страна",
     "notes": "Заметки",
     "dashboard": "Дашборд",
+    "export": "Экспорт",
     "exportCsv": "Экспорт CSV",
+    "exportExcel": "Экспорт Excel",
     "exportPdf": "Экспорт PDF",
     "error": "Произошла ошибка"
   },
@@ -155,6 +157,7 @@
   "invoices": {
     "title": "Счета",
     "newInvoice": "Новый счёт",
+    "number": "Счёт #",
     "issueDate": "Дата выставл.",
     "dueDate": "Срок оплаты",
     "subtotal": "Подытог",

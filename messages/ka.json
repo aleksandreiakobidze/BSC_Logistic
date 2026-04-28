@@ -74,7 +74,9 @@
     "country": "ქვეყანა",
     "notes": "შენიშვნები",
     "dashboard": "დაშბორდი",
+    "export": "ექსპორტი",
     "exportCsv": "CSV ექსპორტი",
+    "exportExcel": "Excel ექსპორტი",
     "exportPdf": "PDF ექსპორტი",
     "error": "შეცდომა მოხდა"
   },
@@ -155,6 +157,7 @@
   "invoices": {
     "title": "ინვოისები",
     "newInvoice": "ახალი ინვოისი",
+    "number": "ინვოისი #",
     "issueDate": "გამოცემის თარიღი",
     "dueDate": "გადახდის ვადა",
     "subtotal": "საწყისი თანხა",

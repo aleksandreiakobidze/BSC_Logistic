@@ -10,6 +10,7 @@ import { StatusBadge } from "@/components/app/status-badge";
 import { EmptyState } from "@/components/app/empty-state";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { NewInvoiceButton } from "./new-invoice-button";
+import { ExportButton } from "@/components/app/export-button";
 
 export default async function InvoicesPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -37,7 +38,12 @@ export default async function InvoicesPage({ params }: { params: Promise<{ local
     <div className="space-y-6">
       <PageHeader
         title={t("invoices.title")}
-        actions={<NewInvoiceButton customers={customers} orders={orders.map((o) => ({ ...o, price: Number(o.price) }))} />}
+        actions={
+          <>
+            <ExportButton entity="invoices" />
+            <NewInvoiceButton customers={customers} orders={orders.map((o) => ({ ...o, price: Number(o.price) }))} />
+          </>
+        }
       />
 
       {invoices.length === 0 ? (
