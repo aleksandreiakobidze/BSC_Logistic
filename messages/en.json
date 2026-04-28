@@ -1,0 +1,208 @@
+{
+  "app": {
+    "name": "BSC Logistics",
+    "tagline": "Smart logistics, simpler operations"
+  },
+  "nav": {
+    "overview": "Overview",
+    "orders": "Orders",
+    "shipments": "Shipments",
+    "dispatch": "Dispatch",
+    "tracking": "Tracking",
+    "fleet": "Fleet",
+    "vehicles": "Vehicles",
+    "maintenance": "Maintenance",
+    "drivers": "Drivers",
+    "customers": "Customers",
+    "warehouse": "Warehouse",
+    "invoices": "Invoices",
+    "expenses": "Expenses",
+    "reports": "Reports",
+    "settings": "Settings",
+    "portal": "Customer Portal",
+    "driver": "Driver",
+    "logout": "Sign out"
+  },
+  "auth": {
+    "login": "Sign in",
+    "register": "Sign up",
+    "email": "Email",
+    "password": "Password",
+    "name": "Full name",
+    "confirmPassword": "Confirm password",
+    "forgotPassword": "Forgot password?",
+    "signInTitle": "Welcome back",
+    "signInSubtitle": "Sign in to manage your logistics operations",
+    "signUpTitle": "Create your workspace",
+    "signUpSubtitle": "Start managing fleets, drivers and shipments",
+    "noAccount": "Don't have an account?",
+    "haveAccount": "Already have an account?",
+    "invalidCredentials": "Invalid email or password",
+    "createAccount": "Create account",
+    "signingIn": "Signing in..."
+  },
+  "common": {
+    "search": "Search",
+    "new": "New",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "submit": "Submit",
+    "loading": "Loading...",
+    "empty": "No data",
+    "status": "Status",
+    "actions": "Actions",
+    "date": "Date",
+    "amount": "Amount",
+    "total": "Total",
+    "details": "Details",
+    "yes": "Yes",
+    "no": "No",
+    "required": "Required",
+    "name": "Name",
+    "email": "Email",
+    "phone": "Phone",
+    "address": "Address",
+    "city": "City",
+    "country": "Country",
+    "notes": "Notes",
+    "dashboard": "Dashboard",
+    "exportCsv": "Export CSV",
+    "exportPdf": "Export PDF"
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Welcome back, {name}",
+    "kpi": {
+      "activeShipments": "Active shipments",
+      "onTimeRate": "On-time rate",
+      "revenueMtd": "Revenue MTD",
+      "fleetUtilization": "Fleet utilization",
+      "openOrders": "Open orders",
+      "overdueInvoices": "Overdue invoices"
+    },
+    "recentShipments": "Recent shipments",
+    "fleetStatus": "Fleet status",
+    "viewAll": "View all"
+  },
+  "orders": {
+    "title": "Orders",
+    "newOrder": "New order",
+    "number": "Order #",
+    "customer": "Customer",
+    "price": "Price",
+    "status": {
+      "QUOTE": "Quote",
+      "CONFIRMED": "Confirmed",
+      "IN_PROGRESS": "In progress",
+      "COMPLETED": "Completed",
+      "CANCELLED": "Cancelled"
+    }
+  },
+  "shipments": {
+    "title": "Shipments",
+    "newShipment": "New shipment",
+    "tracking": "Tracking #",
+    "status": {
+      "PLANNED": "Planned",
+      "ASSIGNED": "Assigned",
+      "PICKED_UP": "Picked up",
+      "IN_TRANSIT": "In transit",
+      "DELIVERED": "Delivered",
+      "FAILED": "Failed",
+      "CANCELLED": "Cancelled"
+    }
+  },
+  "fleet": {
+    "title": "Fleet",
+    "vehicles": "Vehicles",
+    "newVehicle": "New vehicle",
+    "plate": "Plate",
+    "type": "Type",
+    "make": "Make",
+    "model": "Model",
+    "year": "Year",
+    "status": "Status",
+    "capacity": "Capacity",
+    "odometer": "Odometer"
+  },
+  "drivers": {
+    "title": "Drivers",
+    "newDriver": "New driver",
+    "licenseNo": "License #",
+    "licenseExpiry": "License expiry",
+    "status": {
+      "AVAILABLE": "Available",
+      "ON_DUTY": "On duty",
+      "OFF_DUTY": "Off duty",
+      "SUSPENDED": "Suspended"
+    }
+  },
+  "customers": {
+    "title": "Customers",
+    "newCustomer": "New customer",
+    "creditLimit": "Credit limit",
+    "balance": "Balance"
+  },
+  "invoices": {
+    "title": "Invoices",
+    "newInvoice": "New invoice",
+    "issueDate": "Issue date",
+    "dueDate": "Due date",
+    "subtotal": "Subtotal",
+    "tax": "Tax",
+    "total": "Total",
+    "paid": "Paid",
+    "status": {
+      "DRAFT": "Draft",
+      "SENT": "Sent",
+      "PAID": "Paid",
+      "OVERDUE": "Overdue",
+      "CANCELLED": "Cancelled"
+    }
+  },
+  "warehouse": {
+    "title": "Warehouse",
+    "newWarehouse": "New warehouse",
+    "items": "Items",
+    "movements": "Movements",
+    "bins": "Bins",
+    "sku": "SKU",
+    "quantity": "Quantity"
+  },
+  "reports": {
+    "title": "Reports",
+    "revenue": "Revenue",
+    "shipmentsOverTime": "Shipments over time",
+    "fleetUtilization": "Fleet utilization",
+    "topCustomers": "Top customers"
+  },
+  "settings": {
+    "title": "Settings",
+    "organization": "Organization",
+    "users": "Users & Roles",
+    "branches": "Branches",
+    "integrations": "Integrations",
+    "profile": "My profile"
+  },
+  "portal": {
+    "trackTitle": "Track your shipment",
+    "trackPlaceholder": "Enter tracking number",
+    "track": "Track",
+    "noShipment": "We could not find that shipment.",
+    "myShipments": "My shipments",
+    "myInvoices": "My invoices",
+    "requestQuote": "Request a quote"
+  },
+  "driverApp": {
+    "myShipments": "My shipments",
+    "updateStatus": "Update status",
+    "uploadPOD": "Upload proof of delivery",
+    "signedBy": "Signed by",
+    "capturePhoto": "Capture photo"
+  }
+}

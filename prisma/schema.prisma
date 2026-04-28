@@ -1,0 +1,629 @@
+// BSC Logistics database schema
+//
+// SQLite provider: SQLite does not support native enums, @db.* column types,
+// or Json (Json works via Prisma since 4.x but is stored as TEXT). All enum
+// fields are therefore represented as `String` with literal defaults, and the
+// application-layer `lib/enums.ts` exposes const objects/types for ergonomics.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// Tenancy & Users
+// ============================================================================
+
+model Organization {
+  id           String   @id @default(cuid())
+  name         String
+  slug         String   @unique
+  logoUrl      String?
+  baseCurrency String   @default("USD")
+  locale       String   @default("en")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  branches   Branch[]
+  users      User[]
+  customers  Customer[]
+  vehicles   Vehicle[]
+  trailers   Trailer[]
+  drivers    Driver[]
+  orders     Order[]
+  shipments  Shipment[]
+  invoices   Invoice[]
+  expenses   Expense[]
+  warehouses Warehouse[]
+  items      StockItem[]
+  documents  Document[]
+  auditLogs  AuditLog[]
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  orgId     String
+  name      String
+  address   String?
+  city      String?
+  country   String?
+  phone     String?
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  users        User[]
+  vehicles     Vehicle[]
+
+  @@index([orgId])
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String?
+  image         String?
+  role          String    @default("DISPATCHER")
+  locale        String    @default("en")
+  phone         String?
+  emailVerified DateTime?
+  lastLoginAt   DateTime?
+  isActive      Boolean   @default(true)
+  orgId         String?
+  branchId      String?
+  customerId    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  branch       Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  customer     Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  driver       Driver?
+  sessions     Session[]
+  accounts     Account[]
+  invitations  Invitation[]  @relation("InvitedBy")
+  auditLogs    AuditLog[]
+
+  @@index([orgId])
+  @@index([role])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Invitation {
+  id          String    @id @default(cuid())
+  email       String
+  role        String    @default("DISPATCHER")
+  orgId       String
+  invitedById String
+  token       String    @unique
+  acceptedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  invitedBy User @relation("InvitedBy", fields: [invitedById], references: [id])
+
+  @@index([orgId])
+}
+
+// ============================================================================
+// Customers (CRM)
+// ============================================================================
+
+model Customer {
+  id          String   @id @default(cuid())
+  orgId       String
+  name        String
+  code        String?
+  email       String?
+  phone       String?
+  taxId       String?
+  address     String?
+  city        String?
+  country     String?
+  creditLimit Decimal  @default(0)
+  balance     Decimal  @default(0)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  contacts     Contact[]
+  orders       Order[]
+  invoices     Invoice[]
+  users        User[]
+
+  @@unique([orgId, code])
+  @@index([orgId])
+}
+
+model Contact {
+  id         String  @id @default(cuid())
+  customerId String
+  name       String
+  position   String?
+  email      String?
+  phone      String?
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+}
+
+// ============================================================================
+// Fleet
+// ============================================================================
+
+model Vehicle {
+  id         String   @id @default(cuid())
+  orgId      String
+  branchId   String?
+  plate      String
+  vin        String?
+  type       String   @default("TRUCK")
+  status     String   @default("ACTIVE")
+  make       String?
+  model      String?
+  year       Int?
+  capacityKg Int?
+  capacityM3 Float?
+  odometerKm Int      @default(0)
+  fuelType   String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  branch       Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  maintenance  Maintenance[]
+  fuelRecords  FuelRecord[]
+  shipments    Shipment[]
+
+  @@unique([orgId, plate])
+  @@index([orgId])
+}
+
+model Trailer {
+  id         String   @id @default(cuid())
+  orgId      String
+  plate      String
+  type       String?
+  capacityKg Int?
+  createdAt  DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, plate])
+}
+
+model Maintenance {
+  id          String    @id @default(cuid())
+  vehicleId   String
+  kind        String    @default("SCHEDULED")
+  description String
+  cost        Decimal   @default(0)
+  odometerKm  Int?
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId])
+}
+
+model FuelRecord {
+  id         String   @id @default(cuid())
+  vehicleId  String
+  driverId   String?
+  liters     Float
+  cost       Decimal
+  odometerKm Int?
+  station    String?
+  fueledAt   DateTime @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  driver  Driver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId])
+}
+
+// ============================================================================
+// Drivers
+// ============================================================================
+
+model Driver {
+  id            String    @id @default(cuid())
+  orgId         String
+  userId        String?   @unique
+  firstName     String
+  lastName      String
+  email         String?
+  phone         String?
+  licenseNo     String
+  licenseExpiry DateTime?
+  dateOfBirth   DateTime?
+  address       String?
+  status        String    @default("AVAILABLE")
+  payRatePerKm  Decimal   @default(0)
+  payRateFlat   Decimal   @default(0)
+  hireDate      DateTime?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  shipments    Shipment[]
+  fuelRecords  FuelRecord[]
+  settlements  Settlement[]
+
+  @@index([orgId])
+}
+
+// ============================================================================
+// Orders & Shipments
+// ============================================================================
+
+model Order {
+  id          String    @id @default(cuid())
+  orgId       String
+  number      String
+  status      String    @default("QUOTE")
+  customerId  String
+  reference   String?
+  price       Decimal   @default(0)
+  currency    String    @default("USD")
+  notes       String?
+  requestedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id])
+  shipments    Shipment[]
+  invoices     Invoice[]
+
+  @@unique([orgId, number])
+  @@index([status])
+}
+
+model Shipment {
+  id                String    @id @default(cuid())
+  orgId             String
+  orderId           String
+  number            String
+  trackingCode      String    @unique
+  status            String    @default("PLANNED")
+  driverId          String?
+  vehicleId         String?
+  cargoType         String?
+  cargoWeightKg     Float?
+  cargoVolumeM3     Float?
+  temperature       String?
+  plannedDistanceKm Float?
+  actualDistanceKm  Float?
+  plannedStart      DateTime?
+  plannedEnd        DateTime?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  order        Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  driver       Driver?         @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  vehicle      Vehicle?        @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  stops        Stop[]
+  events       ShipmentEvent[]
+  pods         POD[]
+
+  @@unique([orgId, number])
+  @@index([status])
+  @@index([driverId])
+}
+
+model Stop {
+  id          String    @id @default(cuid())
+  shipmentId  String
+  sequence    Int
+  kind        String
+  name        String?
+  address     String
+  city        String?
+  country     String?
+  lat         Float?
+  lng         Float?
+  windowStart DateTime?
+  windowEnd   DateTime?
+  arrivedAt   DateTime?
+  departedAt  DateTime?
+  contact     String?
+  phone       String?
+  notes       String?
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+}
+
+model ShipmentEvent {
+  id         String   @id @default(cuid())
+  shipmentId String
+  type       String
+  at         DateTime @default(now())
+  lat        Float?
+  lng        Float?
+  note       String?
+  meta       String?
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+}
+
+model POD {
+  id           String   @id @default(cuid())
+  shipmentId   String
+  stopId       String?
+  fileKey      String
+  fileUrl      String?
+  capturedAt   DateTime @default(now())
+  signedBy     String?
+  signatureKey String?
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+}
+
+// ============================================================================
+// Warehouse / Inventory
+// ============================================================================
+
+model Warehouse {
+  id        String   @id @default(cuid())
+  orgId     String
+  name      String
+  address   String?
+  city      String?
+  country   String?
+  createdAt DateTime @default(now())
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  bins         Bin[]
+  movements    StockMovement[]
+
+  @@index([orgId])
+}
+
+model Bin {
+  id          String  @id @default(cuid())
+  warehouseId String
+  code        String
+  description String?
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@unique([warehouseId, code])
+}
+
+model StockItem {
+  id        String   @id @default(cuid())
+  orgId     String
+  sku       String
+  name      String
+  unit      String   @default("pcs")
+  weightKg  Float?
+  notes     String?
+  createdAt DateTime @default(now())
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  movements    StockMovement[]
+
+  @@unique([orgId, sku])
+}
+
+model StockMovement {
+  id          String   @id @default(cuid())
+  warehouseId String
+  itemId      String
+  kind        String
+  quantity    Float
+  reference   String?
+  at          DateTime @default(now())
+  notes       String?
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  item      StockItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([warehouseId])
+  @@index([itemId])
+}
+
+// ============================================================================
+// Accounting
+// ============================================================================
+
+model Invoice {
+  id         String   @id @default(cuid())
+  orgId      String
+  number     String
+  orderId    String?
+  customerId String
+  status     String   @default("DRAFT")
+  issueDate  DateTime @default(now())
+  dueDate    DateTime
+  subtotal   Decimal  @default(0)
+  taxRate    Decimal  @default(0)
+  taxAmount  Decimal  @default(0)
+  total      Decimal  @default(0)
+  paid       Decimal  @default(0)
+  currency   String   @default("USD")
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  order        Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  customer     Customer      @relation(fields: [customerId], references: [id])
+  lines        InvoiceLine[]
+  payments     Payment[]
+
+  @@unique([orgId, number])
+  @@index([status])
+}
+
+model InvoiceLine {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  description String
+  quantity    Decimal @default(1)
+  unitPrice   Decimal
+  total       Decimal
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  invoiceId String
+  amount    Decimal
+  method    String   @default("BANK")
+  reference String?
+  paidAt    DateTime @default(now())
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  orgId       String
+  category    String
+  description String
+  amount      Decimal
+  currency    String   @default("USD")
+  vendor      String?
+  incurredAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+}
+
+model Settlement {
+  id         String    @id @default(cuid())
+  driverId   String
+  periodFrom DateTime
+  periodTo   DateTime
+  totalKm    Float     @default(0)
+  gross      Decimal   @default(0)
+  deductions Decimal   @default(0)
+  net        Decimal   @default(0)
+  paidAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  driver Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([driverId])
+}
+
+// ============================================================================
+// Documents & Audit
+// ============================================================================
+
+model Document {
+  id        String   @id @default(cuid())
+  orgId     String
+  ownerType String
+  ownerId   String
+  kind      String   @default("OTHER")
+  name      String
+  fileKey   String
+  fileUrl   String?
+  mimeType  String?
+  sizeBytes Int?
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, ownerType, ownerId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  orgId     String?
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  meta      String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([entity, entityId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String?
+  email     String?
+  phone     String?
+  channel   String
+  subject   String?
+  body      String
+  status    String    @default("queued")
+  sentAt    DateTime?
+  meta      String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([status])
+}

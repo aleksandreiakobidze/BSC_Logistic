@@ -1,0 +1,140 @@
+import React from "react";
+import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+
+type InvoiceForPdf = {
+  number: string;
+  issueDate: Date;
+  dueDate: Date;
+  currency: string;
+  subtotal: unknown;
+  taxRate: unknown;
+  taxAmount: unknown;
+  total: unknown;
+  paid: unknown;
+  status: string;
+  customer: { name: string; address: string | null; city: string | null; country: string | null; taxId: string | null };
+  organization: { name: string };
+  lines: { description: string; quantity: unknown; unitPrice: unknown; total: unknown }[];
+};
+
+const styles = StyleSheet.create({
+  page: { padding: 40, fontSize: 10, fontFamily: "Helvetica", color: "#111" },
+  header: { flexDirection: "row", justifyContent: "space-between", marginBottom: 24 },
+  h1: { fontSize: 22, fontWeight: 700 },
+  muted: { color: "#666" },
+  card: { border: "1pt solid #e5e7eb", borderRadius: 6, padding: 12, marginBottom: 12 },
+  row: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
+  table: { marginTop: 12 },
+  tableHead: {
+    flexDirection: "row",
+    backgroundColor: "#f8fafc",
+    borderTop: "1pt solid #e5e7eb",
+    borderBottom: "1pt solid #e5e7eb",
+    padding: 6,
+    fontSize: 9,
+    textTransform: "uppercase",
+    fontWeight: 700,
+  },
+  tableRow: {
+    flexDirection: "row",
+    borderBottom: "1pt solid #f1f5f9",
+    padding: 6,
+  },
+  cellDesc: { flex: 4 },
+  cellQty: { flex: 1, textAlign: "right" },
+  cellPrice: { flex: 1.5, textAlign: "right" },
+  cellTotal: { flex: 1.5, textAlign: "right" },
+  totals: { marginTop: 12, marginLeft: "auto", width: 260 },
+  grand: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingTop: 6,
+    marginTop: 6,
+    borderTop: "1pt solid #e5e7eb",
+    fontWeight: 700,
+    fontSize: 12,
+  },
+  footer: { position: "absolute", bottom: 30, left: 40, right: 40, color: "#94a3b8", fontSize: 9 },
+});
+
+function f(n: unknown, cur = "USD") {
+  const num = Number(n ?? 0);
+  return `${cur} ${num.toFixed(2)}`;
+}
+
+function d(date: Date) {
+  return new Date(date).toISOString().slice(0, 10);
+}
+
+export function InvoicePDF({ invoice }: { invoice: InvoiceForPdf }) {
+  return (
+    <Document>
+      <Page size="A4" style={styles.page}>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.h1}>INVOICE</Text>
+            <Text style={styles.muted}>#{invoice.number}</Text>
+          </View>
+          <View style={{ textAlign: "right" }}>
+            <Text style={{ fontWeight: 700 }}>{invoice.organization.name}</Text>
+            <Text style={styles.muted}>Issue date: {d(invoice.issueDate)}</Text>
+            <Text style={styles.muted}>Due date: {d(invoice.dueDate)}</Text>
+            <Text style={styles.muted}>Status: {invoice.status}</Text>
+          </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={{ fontWeight: 700, marginBottom: 4 }}>Bill to</Text>
+          <Text>{invoice.customer.name}</Text>
+          {invoice.customer.address && <Text style={styles.muted}>{invoice.customer.address}</Text>}
+          {(invoice.customer.city || invoice.customer.country) && (
+            <Text style={styles.muted}>
+              {[invoice.customer.city, invoice.customer.country].filter(Boolean).join(", ")}
+            </Text>
+          )}
+          {invoice.customer.taxId && <Text style={styles.muted}>Tax ID: {invoice.customer.taxId}</Text>}
+        </View>
+
+        <View style={styles.table}>
+          <View style={styles.tableHead}>
+            <Text style={styles.cellDesc}>Description</Text>
+            <Text style={styles.cellQty}>Qty</Text>
+            <Text style={styles.cellPrice}>Unit</Text>
+            <Text style={styles.cellTotal}>Total</Text>
+          </View>
+          {invoice.lines.map((l, i) => (
+            <View key={i} style={styles.tableRow}>
+              <Text style={styles.cellDesc}>{l.description}</Text>
+              <Text style={styles.cellQty}>{Number(l.quantity)}</Text>
+              <Text style={styles.cellPrice}>{f(l.unitPrice, invoice.currency)}</Text>
+              <Text style={styles.cellTotal}>{f(l.total, invoice.currency)}</Text>
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.totals}>
+          <View style={styles.row}>
+            <Text>Subtotal</Text>
+            <Text>{f(invoice.subtotal, invoice.currency)}</Text>
+          </View>
+          <View style={styles.row}>
+            <Text>Tax ({Number(invoice.taxRate)}%)</Text>
+            <Text>{f(invoice.taxAmount, invoice.currency)}</Text>
+          </View>
+          <View style={styles.grand}>
+            <Text>Total</Text>
+            <Text>{f(invoice.total, invoice.currency)}</Text>
+          </View>
+          {Number(invoice.paid) > 0 && (
+            <View style={styles.row}>
+              <Text>Paid</Text>
+              <Text>{f(invoice.paid, invoice.currency)}</Text>
+            </View>
+          )}
+        </View>
+
+        <Text style={styles.footer}>Generated by BSC Logistics</Text>
+      </Page>
+    </Document>
+  );
+}

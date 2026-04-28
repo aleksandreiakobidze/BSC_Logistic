@@ -1,0 +1,208 @@
+{
+  "app": {
+    "name": "BSC ლოჯისტიკა",
+    "tagline": "ჭკვიანი ლოჯისტიკა, მარტივი ოპერაციები"
+  },
+  "nav": {
+    "overview": "მიმოხილვა",
+    "orders": "შეკვეთები",
+    "shipments": "გადაზიდვები",
+    "dispatch": "დისპეტჩერი",
+    "tracking": "მონიტორინგი",
+    "fleet": "ავტოპარკი",
+    "vehicles": "მანქანები",
+    "maintenance": "ტექმომსახურება",
+    "drivers": "მძღოლები",
+    "customers": "კლიენტები",
+    "warehouse": "საწყობი",
+    "invoices": "ინვოისები",
+    "expenses": "ხარჯები",
+    "reports": "რეპორტები",
+    "settings": "პარამეტრები",
+    "portal": "კლიენტის პორტალი",
+    "driver": "მძღოლი",
+    "logout": "გასვლა"
+  },
+  "auth": {
+    "login": "შესვლა",
+    "register": "რეგისტრაცია",
+    "email": "ელფოსტა",
+    "password": "პაროლი",
+    "name": "სრული სახელი",
+    "confirmPassword": "გაიმეორეთ პაროლი",
+    "forgotPassword": "დაგავიწყდათ პაროლი?",
+    "signInTitle": "კეთილი იყოს თქვენი დაბრუნება",
+    "signInSubtitle": "შედით თქვენი ლოჯისტიკის სამართავად",
+    "signUpTitle": "შექმენით სამუშაო სივრცე",
+    "signUpSubtitle": "დაიწყეთ ავტოპარკის, მძღოლების და გადაზიდვების მართვა",
+    "noAccount": "არ გაქვთ ანგარიში?",
+    "haveAccount": "უკვე გაქვთ ანგარიში?",
+    "invalidCredentials": "არასწორი ელფოსტა ან პაროლი",
+    "createAccount": "ანგარიშის შექმნა",
+    "signingIn": "შესვლა..."
+  },
+  "common": {
+    "search": "ძებნა",
+    "new": "ახალი",
+    "save": "შენახვა",
+    "cancel": "გაუქმება",
+    "delete": "წაშლა",
+    "edit": "რედაქტირება",
+    "close": "დახურვა",
+    "back": "უკან",
+    "next": "შემდეგი",
+    "submit": "დადასტურება",
+    "loading": "იტვირთება...",
+    "empty": "მონაცემები არ არის",
+    "status": "სტატუსი",
+    "actions": "მოქმედებები",
+    "date": "თარიღი",
+    "amount": "რაოდენობა",
+    "total": "ჯამი",
+    "details": "დეტალები",
+    "yes": "კი",
+    "no": "არა",
+    "required": "აუცილებელი",
+    "name": "სახელი",
+    "email": "ელფოსტა",
+    "phone": "ტელეფონი",
+    "address": "მისამართი",
+    "city": "ქალაქი",
+    "country": "ქვეყანა",
+    "notes": "შენიშვნები",
+    "dashboard": "დაშბორდი",
+    "exportCsv": "CSV ექსპორტი",
+    "exportPdf": "PDF ექსპორტი"
+  },
+  "dashboard": {
+    "title": "დაშბორდი",
+    "welcome": "მოგესალმებით, {name}",
+    "kpi": {
+      "activeShipments": "აქტიური გადაზიდვები",
+      "onTimeRate": "დროული მიწოდება",
+      "revenueMtd": "შემოსავალი ამ თვეში",
+      "fleetUtilization": "პარკის გამოყენება",
+      "openOrders": "ღია შეკვეთები",
+      "overdueInvoices": "ვადაგადაცილ. ინვოისები"
+    },
+    "recentShipments": "ბოლო გადაზიდვები",
+    "fleetStatus": "პარკის სტატუსი",
+    "viewAll": "ყველას ნახვა"
+  },
+  "orders": {
+    "title": "შეკვეთები",
+    "newOrder": "ახალი შეკვეთა",
+    "number": "შეკვეთა #",
+    "customer": "კლიენტი",
+    "price": "ფასი",
+    "status": {
+      "QUOTE": "ფასის მოთხოვნა",
+      "CONFIRMED": "დადასტურებული",
+      "IN_PROGRESS": "მიმდინარე",
+      "COMPLETED": "დასრულებული",
+      "CANCELLED": "გაუქმებული"
+    }
+  },
+  "shipments": {
+    "title": "გადაზიდვები",
+    "newShipment": "ახალი გადაზიდვა",
+    "tracking": "ტრეკინგი #",
+    "status": {
+      "PLANNED": "დაგეგმილი",
+      "ASSIGNED": "დანიშნული",
+      "PICKED_UP": "აღებული",
+      "IN_TRANSIT": "გზაში",
+      "DELIVERED": "ჩაბარებული",
+      "FAILED": "ვერ ჩაბარდა",
+      "CANCELLED": "გაუქმებული"
+    }
+  },
+  "fleet": {
+    "title": "ავტოპარკი",
+    "vehicles": "მანქანები",
+    "newVehicle": "ახალი მანქანა",
+    "plate": "ნომერი",
+    "type": "ტიპი",
+    "make": "მწარმოებელი",
+    "model": "მოდელი",
+    "year": "წელი",
+    "status": "სტატუსი",
+    "capacity": "მოცულობა",
+    "odometer": "სპიდომეტრი"
+  },
+  "drivers": {
+    "title": "მძღოლები",
+    "newDriver": "ახალი მძღოლი",
+    "licenseNo": "მართვის მოწმ. #",
+    "licenseExpiry": "მოწმობის ვადა",
+    "status": {
+      "AVAILABLE": "ხელმისაწვდომი",
+      "ON_DUTY": "მორიგეობაზე",
+      "OFF_DUTY": "დასვენებაზე",
+      "SUSPENDED": "შეჩერებული"
+    }
+  },
+  "customers": {
+    "title": "კლიენტები",
+    "newCustomer": "ახალი კლიენტი",
+    "creditLimit": "საკრედ. ლიმიტი",
+    "balance": "ბალანსი"
+  },
+  "invoices": {
+    "title": "ინვოისები",
+    "newInvoice": "ახალი ინვოისი",
+    "issueDate": "გამოცემის თარიღი",
+    "dueDate": "გადახდის ვადა",
+    "subtotal": "საწყისი თანხა",
+    "tax": "გადასახადი",
+    "total": "ჯამი",
+    "paid": "გადახდილი",
+    "status": {
+      "DRAFT": "დრაფტი",
+      "SENT": "გაგზავნილი",
+      "PAID": "გადახდილი",
+      "OVERDUE": "ვადაგადაცილებული",
+      "CANCELLED": "გაუქმებული"
+    }
+  },
+  "warehouse": {
+    "title": "საწყობი",
+    "newWarehouse": "ახალი საწყობი",
+    "items": "ნივთები",
+    "movements": "მოძრაობები",
+    "bins": "უჯრედები",
+    "sku": "SKU",
+    "quantity": "რაოდენობა"
+  },
+  "reports": {
+    "title": "რეპორტები",
+    "revenue": "შემოსავალი",
+    "shipmentsOverTime": "გადაზიდვები დროში",
+    "fleetUtilization": "პარკის გამოყენება",
+    "topCustomers": "ტოპ კლიენტები"
+  },
+  "settings": {
+    "title": "პარამეტრები",
+    "organization": "ორგანიზაცია",
+    "users": "მომხმარებლები და როლები",
+    "branches": "ფილიალები",
+    "integrations": "ინტეგრაციები",
+    "profile": "ჩემი პროფილი"
+  },
+  "portal": {
+    "trackTitle": "თვალი ადევნეთ გადაზიდვას",
+    "trackPlaceholder": "შეიყვანეთ ტრეკინგ ნომერი",
+    "track": "ძებნა",
+    "noShipment": "გადაზიდვა ვერ მოიძებნა.",
+    "myShipments": "ჩემი გადაზიდვები",
+    "myInvoices": "ჩემი ინვოისები",
+    "requestQuote": "შეკვეთის მოთხოვნა"
+  },
+  "driverApp": {
+    "myShipments": "ჩემი გადაზიდვები",
+    "updateStatus": "სტატუსის განახლება",
+    "uploadPOD": "ჩაბარების დოკუმენტი",
+    "signedBy": "ხელმომწერი",
+    "capturePhoto": "ფოტოს გადაღება"
+  }
+}

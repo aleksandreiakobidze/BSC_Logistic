@@ -1,0 +1,76 @@
+import { setRequestLocale, getTranslations } from "next-intl/server";
+import { Wrench } from "lucide-react";
+import { prisma } from "@/lib/db";
+import { requireOrg } from "@/lib/actions";
+import { PageHeader } from "@/components/app/page-header";
+import { Card, CardContent } from "@/components/ui/card";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import { EmptyState } from "@/components/app/empty-state";
+
+export default async function MaintenancePage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+  const t = await getTranslations();
+  const { orgId } = await requireOrg();
+
+  const records = await prisma.maintenance.findMany({
+    where: { vehicle: { orgId } },
+    include: { vehicle: true },
+    orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
+  });
+
+  return (
+    <div className="space-y-6">
+      <PageHeader title={t("nav.maintenance")} />
+
+      {records.length === 0 ? (
+        <EmptyState
+          icon={Wrench}
+          title="No maintenance records"
+          description="Log maintenance against vehicles to track costs and plan ahead."
+        />
+      ) : (
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Vehicle</TableHead>
+                  <TableHead>Kind</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Due</TableHead>
+                  <TableHead>Completed</TableHead>
+                  <TableHead className="text-right">Cost</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {records.map((m) => (
+                  <TableRow key={m.id}>
+                    <TableCell className="font-medium">{m.vehicle.plate}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{m.kind}</Badge>
+                    </TableCell>
+                    <TableCell className="max-w-xs truncate">{m.description}</TableCell>
+                    <TableCell>{m.dueDate ? formatDate(m.dueDate, locale) : "—"}</TableCell>
+                    <TableCell>
+                      {m.completedAt ? (
+                        formatDate(m.completedAt, locale)
+                      ) : (
+                        <Badge variant="warning">Pending</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {formatCurrency(Number(m.cost), "USD", locale)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}

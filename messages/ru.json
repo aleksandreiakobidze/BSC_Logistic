@@ -1,0 +1,208 @@
+{
+  "app": {
+    "name": "BSC Логистика",
+    "tagline": "Умная логистика, простые операции"
+  },
+  "nav": {
+    "overview": "Обзор",
+    "orders": "Заказы",
+    "shipments": "Перевозки",
+    "dispatch": "Диспетчер",
+    "tracking": "Отслеживание",
+    "fleet": "Автопарк",
+    "vehicles": "Транспорт",
+    "maintenance": "Техобслуживание",
+    "drivers": "Водители",
+    "customers": "Клиенты",
+    "warehouse": "Склад",
+    "invoices": "Счета",
+    "expenses": "Расходы",
+    "reports": "Отчёты",
+    "settings": "Настройки",
+    "portal": "Клиентский портал",
+    "driver": "Водитель",
+    "logout": "Выйти"
+  },
+  "auth": {
+    "login": "Войти",
+    "register": "Регистрация",
+    "email": "Эл. почта",
+    "password": "Пароль",
+    "name": "Полное имя",
+    "confirmPassword": "Повторите пароль",
+    "forgotPassword": "Забыли пароль?",
+    "signInTitle": "С возвращением",
+    "signInSubtitle": "Войдите, чтобы управлять логистикой",
+    "signUpTitle": "Создайте рабочее пространство",
+    "signUpSubtitle": "Начните управлять парком, водителями и перевозками",
+    "noAccount": "Нет аккаунта?",
+    "haveAccount": "Уже есть аккаунт?",
+    "invalidCredentials": "Неверный email или пароль",
+    "createAccount": "Создать аккаунт",
+    "signingIn": "Вход..."
+  },
+  "common": {
+    "search": "Поиск",
+    "new": "Новый",
+    "save": "Сохранить",
+    "cancel": "Отмена",
+    "delete": "Удалить",
+    "edit": "Изменить",
+    "close": "Закрыть",
+    "back": "Назад",
+    "next": "Далее",
+    "submit": "Отправить",
+    "loading": "Загрузка...",
+    "empty": "Нет данных",
+    "status": "Статус",
+    "actions": "Действия",
+    "date": "Дата",
+    "amount": "Сумма",
+    "total": "Итого",
+    "details": "Детали",
+    "yes": "Да",
+    "no": "Нет",
+    "required": "Обязательно",
+    "name": "Имя",
+    "email": "Эл. почта",
+    "phone": "Телефон",
+    "address": "Адрес",
+    "city": "Город",
+    "country": "Страна",
+    "notes": "Заметки",
+    "dashboard": "Дашборд",
+    "exportCsv": "Экспорт CSV",
+    "exportPdf": "Экспорт PDF"
+  },
+  "dashboard": {
+    "title": "Дашборд",
+    "welcome": "С возвращением, {name}",
+    "kpi": {
+      "activeShipments": "Активные перевозки",
+      "onTimeRate": "Доставка вовремя",
+      "revenueMtd": "Выручка за месяц",
+      "fleetUtilization": "Загрузка парка",
+      "openOrders": "Открытые заказы",
+      "overdueInvoices": "Просроченные счета"
+    },
+    "recentShipments": "Последние перевозки",
+    "fleetStatus": "Состояние парка",
+    "viewAll": "Показать все"
+  },
+  "orders": {
+    "title": "Заказы",
+    "newOrder": "Новый заказ",
+    "number": "Заказ #",
+    "customer": "Клиент",
+    "price": "Цена",
+    "status": {
+      "QUOTE": "Котировка",
+      "CONFIRMED": "Подтверждён",
+      "IN_PROGRESS": "В работе",
+      "COMPLETED": "Завершён",
+      "CANCELLED": "Отменён"
+    }
+  },
+  "shipments": {
+    "title": "Перевозки",
+    "newShipment": "Новая перевозка",
+    "tracking": "Трек-номер",
+    "status": {
+      "PLANNED": "Запланирована",
+      "ASSIGNED": "Назначена",
+      "PICKED_UP": "Загружена",
+      "IN_TRANSIT": "В пути",
+      "DELIVERED": "Доставлена",
+      "FAILED": "Не доставлена",
+      "CANCELLED": "Отменена"
+    }
+  },
+  "fleet": {
+    "title": "Автопарк",
+    "vehicles": "Транспорт",
+    "newVehicle": "Новое ТС",
+    "plate": "Номер",
+    "type": "Тип",
+    "make": "Марка",
+    "model": "Модель",
+    "year": "Год",
+    "status": "Статус",
+    "capacity": "Грузоподъёмность",
+    "odometer": "Пробег"
+  },
+  "drivers": {
+    "title": "Водители",
+    "newDriver": "Новый водитель",
+    "licenseNo": "№ прав",
+    "licenseExpiry": "Срок прав",
+    "status": {
+      "AVAILABLE": "Свободен",
+      "ON_DUTY": "На смене",
+      "OFF_DUTY": "Не на смене",
+      "SUSPENDED": "Отстранён"
+    }
+  },
+  "customers": {
+    "title": "Клиенты",
+    "newCustomer": "Новый клиент",
+    "creditLimit": "Кредитный лимит",
+    "balance": "Баланс"
+  },
+  "invoices": {
+    "title": "Счета",
+    "newInvoice": "Новый счёт",
+    "issueDate": "Дата выставл.",
+    "dueDate": "Срок оплаты",
+    "subtotal": "Подытог",
+    "tax": "Налог",
+    "total": "Итого",
+    "paid": "Оплачено",
+    "status": {
+      "DRAFT": "Черновик",
+      "SENT": "Отправлен",
+      "PAID": "Оплачен",
+      "OVERDUE": "Просрочен",
+      "CANCELLED": "Отменён"
+    }
+  },
+  "warehouse": {
+    "title": "Склад",
+    "newWarehouse": "Новый склад",
+    "items": "Товары",
+    "movements": "Движения",
+    "bins": "Ячейки",
+    "sku": "Артикул",
+    "quantity": "Количество"
+  },
+  "reports": {
+    "title": "Отчёты",
+    "revenue": "Выручка",
+    "shipmentsOverTime": "Перевозки во времени",
+    "fleetUtilization": "Загрузка парка",
+    "topCustomers": "Топ клиенты"
+  },
+  "settings": {
+    "title": "Настройки",
+    "organization": "Организация",
+    "users": "Пользователи и роли",
+    "branches": "Филиалы",
+    "integrations": "Интеграции",
+    "profile": "Мой профиль"
+  },
+  "portal": {
+    "trackTitle": "Отследить перевозку",
+    "trackPlaceholder": "Введите трек-номер",
+    "track": "Отследить",
+    "noShipment": "Перевозка не найдена.",
+    "myShipments": "Мои перевозки",
+    "myInvoices": "Мои счета",
+    "requestQuote": "Запросить расчёт"
+  },
+  "driverApp": {
+    "myShipments": "Мои перевозки",
+    "updateStatus": "Обновить статус",
+    "uploadPOD": "Загрузить подтверждение",
+    "signedBy": "Подписано",
+    "capturePhoto": "Сделать фото"
+  }
+}
