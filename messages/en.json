@@ -13,7 +13,10 @@
     "vehicles": "Vehicles",
     "maintenance": "Maintenance",
     "drivers": "Drivers",
+    "crm": "CRM",
     "customers": "Customers",
+    "contacts": "Contacts",
+    "leads": "Leads",
     "warehouse": "Warehouse",
     "invoices": "Invoices",
     "expenses": "Expenses",
@@ -72,7 +75,8 @@
     "notes": "Notes",
     "dashboard": "Dashboard",
     "exportCsv": "Export CSV",
-    "exportPdf": "Export PDF"
+    "exportPdf": "Export PDF",
+    "error": "An error occurred"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -204,5 +208,74 @@
     "uploadPOD": "Upload proof of delivery",
     "signedBy": "Signed by",
     "capturePhoto": "Capture photo"
-  }
+  },
+  "leads": {
+    "title": "Leads",
+    "description": "Manage your sales pipeline",
+    "newLead": "New lead",
+    "newLeadDescription": "Add a new lead to your pipeline",
+    "editLead": "Edit lead",
+    "created": "Lead created",
+    "updated": "Lead updated",
+    "deleted": "Lead deleted",
+    "empty": "No leads yet",
+    "emptyDescription": "Start tracking potential customers by adding your first lead.",
+    "company": "Company",
+    "estimatedValue": "Est. value",
+    "status": "Status",
+    "source": "Source",
+    "sourcePlaceholder": "Select source",
+    "assignedTo": "Assigned to",
+    "unassigned": "Unassigned",
+    "nextFollowUp": "Next follow-up",
+    "details": "Details",
+    "activity": "Activity",
+    "activityAdded": "Activity logged",
+    "activityPlaceholder": "Add a note, call, or meeting log...",
+    "logActivity": "Log activity",
+    "noActivity": "No activity yet",
+    "convertToCustomer": "Convert to Customer",
+    "convertConfirm": "Convert {name} to a customer? This will create a new customer record.",
+    "convertedSuccess": "Lead converted to customer successfully",
+    "convertedAt": "Converted",
+    "lostReason": "Lost reason",
+    "statuses": {
+      "NEW": "New",
+      "CONTACTED": "Contacted",
+      "QUALIFIED": "Qualified",
+      "PROPOSAL_SENT": "Proposal Sent",
+      "NEGOTIATION": "Negotiation",
+      "WON": "Won",
+      "LOST": "Lost"
+    },
+    "sources": {
+      "WEBSITE": "Website",
+      "PHONE": "Phone",
+      "REFERRAL": "Referral",
+      "EMAIL": "Email",
+      "TENDER": "Tender",
+      "SOCIAL": "Social Media"
+    },
+    "activityKinds": {
+      "NOTE": "Note",
+      "CALL": "Call",
+      "EMAIL": "Email",
+      "MEETING": "Meeting",
+      "STATUS_CHANGE": "Status change"
+    }
+  },
+  "contacts": {
+    "title": "Contacts",
+    "description": "All contacts across your customers",
+    "newContact": "New contact",
+    "newContactDescription": "Add a contact person to a customer",
+    "created": "Contact created",
+    "updated": "Contact updated",
+    "deleted": "Contact deleted",
+    "empty": "No contacts yet",
+    "emptyDescription": "Add contacts to your customers to keep track of key people.",
+    "position": "Position",
+    "customer": "Customer",
+    "selectCustomer": "Select customer"
+  },
 }

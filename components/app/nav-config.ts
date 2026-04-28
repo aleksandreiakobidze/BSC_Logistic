@@ -4,6 +4,7 @@ import {
   Package,
   Wrench,
   Users,
+  Users2,
   Building2,
   Warehouse,
   FileText,
@@ -12,6 +13,7 @@ import {
   Settings,
   Map,
   Route,
+  UserPlus,
   type LucideIcon,
 } from "lucide-react";
 import type { Role } from "@/lib/enums";
@@ -52,9 +54,16 @@ export const navGroups: NavGroup[] = [
     ],
   },
   {
-    labelKey: "nav.customers",
+    labelKey: "nav.crm",
     items: [
       { href: "/customers", labelKey: "nav.customers", icon: Building2 },
+      { href: "/contacts", labelKey: "nav.contacts", icon: Users2 },
+      {
+        href: "/leads",
+        labelKey: "nav.leads",
+        icon: UserPlus,
+        roles: ["ADMIN", "DISPATCHER"],
+      },
       { href: "/warehouse", labelKey: "nav.warehouse", icon: Warehouse },
     ],
   },

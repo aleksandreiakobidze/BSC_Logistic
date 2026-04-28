@@ -13,7 +13,10 @@
     "vehicles": "მანქანები",
     "maintenance": "ტექმომსახურება",
     "drivers": "მძღოლები",
+    "crm": "CRM",
     "customers": "კლიენტები",
+    "contacts": "კონტაქტები",
+    "leads": "ლიდები",
     "warehouse": "საწყობი",
     "invoices": "ინვოისები",
     "expenses": "ხარჯები",
@@ -72,7 +75,8 @@
     "notes": "შენიშვნები",
     "dashboard": "დაშბორდი",
     "exportCsv": "CSV ექსპორტი",
-    "exportPdf": "PDF ექსპორტი"
+    "exportPdf": "PDF ექსპორტი",
+    "error": "შეცდომა მოხდა"
   },
   "dashboard": {
     "title": "დაშბორდი",
@@ -204,5 +208,74 @@
     "uploadPOD": "ჩაბარების დოკუმენტი",
     "signedBy": "ხელმომწერი",
     "capturePhoto": "ფოტოს გადაღება"
+  },
+  "leads": {
+    "title": "ლიდები",
+    "description": "გაყიდვების პაიფლაინის მართვა",
+    "newLead": "ახალი ლიდი",
+    "newLeadDescription": "დაამატეთ ახალი პოტენციური კლიენტი",
+    "editLead": "ლიდის რედაქტირება",
+    "created": "ლიდი შეიქმნა",
+    "updated": "ლიდი განახლდა",
+    "deleted": "ლიდი წაიშალა",
+    "empty": "ლიდები არ არის",
+    "emptyDescription": "დაამატეთ პირველი ლიდი გაყიდვების თვალყურის დევნისთვის.",
+    "company": "კომპანია",
+    "estimatedValue": "სავარ. ღირებულება",
+    "status": "სტატუსი",
+    "source": "წყარო",
+    "sourcePlaceholder": "წყაროს არჩევა",
+    "assignedTo": "პასუხისმგებელი",
+    "unassigned": "გამოუნიშნავი",
+    "nextFollowUp": "შემდეგი კონტაქტი",
+    "details": "დეტალები",
+    "activity": "აქტივობა",
+    "activityAdded": "აქტივობა დაფიქსირდა",
+    "activityPlaceholder": "შენიშვნა, ზარი ან შეხვედრის ჩანაწერი...",
+    "logActivity": "აქტივობის ჩაწერა",
+    "noActivity": "აქტივობა არ არის",
+    "convertToCustomer": "კლიენტად გადაყვანა",
+    "convertConfirm": "გადაიყვანოთ {name} კლიენტად?",
+    "convertedSuccess": "ლიდი წარმატებით გადაიყვანა კლიენტად",
+    "convertedAt": "გადაყვანის თარიღი",
+    "lostReason": "წაგების მიზეზი",
+    "statuses": {
+      "NEW": "ახალი",
+      "CONTACTED": "დაკავშირებული",
+      "QUALIFIED": "კვალიფიცირებული",
+      "PROPOSAL_SENT": "შეთავაზება გაგზავნილი",
+      "NEGOTIATION": "მოლაპარაკება",
+      "WON": "მოგებული",
+      "LOST": "წაგებული"
+    },
+    "sources": {
+      "WEBSITE": "ვებსაიტი",
+      "PHONE": "ტელეფონი",
+      "REFERRAL": "რეკომენდაცია",
+      "EMAIL": "ელფოსტა",
+      "TENDER": "ტენდერი",
+      "SOCIAL": "სოციალური მედია"
+    },
+    "activityKinds": {
+      "NOTE": "შენიშვნა",
+      "CALL": "ზარი",
+      "EMAIL": "ელფოსტა",
+      "MEETING": "შეხვედრა",
+      "STATUS_CHANGE": "სტატუსის ცვლილება"
+    }
+  },
+  "contacts": {
+    "title": "კონტაქტები",
+    "description": "კლიენტების ყველა საკონტაქტო პირი",
+    "newContact": "ახალი კონტაქტი",
+    "newContactDescription": "კლიენტს დაუმატეთ საკონტაქტო პირი",
+    "created": "კონტაქტი შეიქმნა",
+    "updated": "კონტაქტი განახლდა",
+    "deleted": "კონტაქტი წაიშალა",
+    "empty": "კონტაქტები არ არის",
+    "emptyDescription": "კლიენტებს დაუმატეთ საკონტაქტო პირები.",
+    "position": "პოზიცია",
+    "customer": "კლიენტი",
+    "selectCustomer": "კლიენტის არჩევა"
   }
 }

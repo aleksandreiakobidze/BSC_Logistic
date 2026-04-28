@@ -127,3 +127,33 @@ export const DocKind = {
   OTHER: "OTHER",
 } as const;
 export type DocKind = (typeof DocKind)[keyof typeof DocKind];
+
+export const LeadStatus = {
+  NEW: "NEW",
+  CONTACTED: "CONTACTED",
+  QUALIFIED: "QUALIFIED",
+  PROPOSAL_SENT: "PROPOSAL_SENT",
+  NEGOTIATION: "NEGOTIATION",
+  WON: "WON",
+  LOST: "LOST",
+} as const;
+export type LeadStatus = (typeof LeadStatus)[keyof typeof LeadStatus];
+
+export const LeadSource = {
+  WEBSITE: "WEBSITE",
+  PHONE: "PHONE",
+  REFERRAL: "REFERRAL",
+  EMAIL: "EMAIL",
+  TENDER: "TENDER",
+  SOCIAL: "SOCIAL",
+} as const;
+export type LeadSource = (typeof LeadSource)[keyof typeof LeadSource];
+
+export const ActivityKind = {
+  NOTE: "NOTE",
+  CALL: "CALL",
+  EMAIL: "EMAIL",
+  MEETING: "MEETING",
+  STATUS_CHANGE: "STATUS_CHANGE",
+} as const;
+export type ActivityKind = (typeof ActivityKind)[keyof typeof ActivityKind];

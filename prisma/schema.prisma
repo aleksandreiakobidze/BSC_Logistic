@@ -42,6 +42,7 @@ model Organization {
   items      StockItem[]
   documents  Document[]
   auditLogs  AuditLog[]
+  leads      Lead[]
 }
 
 model Branch {
@@ -79,14 +80,15 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  organization Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
-  branch       Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  customer     Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  driver       Driver?
-  sessions     Session[]
-  accounts     Account[]
-  invitations  Invitation[]  @relation("InvitedBy")
-  auditLogs    AuditLog[]
+  organization   Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  branch         Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  customer       Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  driver         Driver?
+  sessions       Session[]
+  accounts       Account[]
+  invitations    Invitation[]    @relation("InvitedBy")
+  auditLogs      AuditLog[]
+  assignedLeads  Lead[]          @relation("AssignedLeads")
 
   @@index([orgId])
   @@index([role])
@@ -169,6 +171,7 @@ model Customer {
   orders       Order[]
   invoices     Invoice[]
   users        User[]
+  leads        Lead[]
 
   @@unique([orgId, code])
   @@index([orgId])
@@ -626,4 +629,51 @@ model Notification {
 
   @@index([userId])
   @@index([status])
+}
+
+// ============================================================================
+// CRM — Leads
+// ============================================================================
+
+model Lead {
+  id             String    @id @default(cuid())
+  orgId          String
+  name           String
+  email          String?
+  phone          String?
+  company        String?
+  status         String    @default("NEW")
+  source         String?
+  assignedToId   String?
+  estimatedValue Decimal   @default(0)
+  currency       String    @default("USD")
+  nextFollowUp   DateTime?
+  notes          String?
+  lostReason     String?
+  convertedAt    DateTime?
+  customerId     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignedTo   User?          @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
+  customer     Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  activities   LeadActivity[]
+
+  @@index([orgId])
+  @@index([status])
+  @@index([assignedToId])
+}
+
+model LeadActivity {
+  id     String   @id @default(cuid())
+  leadId String
+  userId String?
+  kind   String
+  note   String?
+  at     DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
 }

@@ -13,7 +13,10 @@
     "vehicles": "Транспорт",
     "maintenance": "Техобслуживание",
     "drivers": "Водители",
+    "crm": "CRM",
     "customers": "Клиенты",
+    "contacts": "Контакты",
+    "leads": "Лиды",
     "warehouse": "Склад",
     "invoices": "Счета",
     "expenses": "Расходы",
@@ -72,7 +75,8 @@
     "notes": "Заметки",
     "dashboard": "Дашборд",
     "exportCsv": "Экспорт CSV",
-    "exportPdf": "Экспорт PDF"
+    "exportPdf": "Экспорт PDF",
+    "error": "Произошла ошибка"
   },
   "dashboard": {
     "title": "Дашборд",
@@ -204,5 +208,74 @@
     "uploadPOD": "Загрузить подтверждение",
     "signedBy": "Подписано",
     "capturePhoto": "Сделать фото"
+  },
+  "leads": {
+    "title": "Лиды",
+    "description": "Управление воронкой продаж",
+    "newLead": "Новый лид",
+    "newLeadDescription": "Добавьте нового потенциального клиента",
+    "editLead": "Редактировать лид",
+    "created": "Лид создан",
+    "updated": "Лид обновлён",
+    "deleted": "Лид удалён",
+    "empty": "Нет лидов",
+    "emptyDescription": "Добавьте первый лид для отслеживания потенциальных клиентов.",
+    "company": "Компания",
+    "estimatedValue": "Ожид. сумма",
+    "status": "Статус",
+    "source": "Источник",
+    "sourcePlaceholder": "Выберите источник",
+    "assignedTo": "Ответственный",
+    "unassigned": "Не назначен",
+    "nextFollowUp": "След. контакт",
+    "details": "Детали",
+    "activity": "Активность",
+    "activityAdded": "Активность записана",
+    "activityPlaceholder": "Заметка, звонок или встреча...",
+    "logActivity": "Записать активность",
+    "noActivity": "Нет активности",
+    "convertToCustomer": "Конвертировать в клиента",
+    "convertConfirm": "Конвертировать {name} в клиента?",
+    "convertedSuccess": "Лид успешно конвертирован в клиента",
+    "convertedAt": "Дата конвертации",
+    "lostReason": "Причина отказа",
+    "statuses": {
+      "NEW": "Новый",
+      "CONTACTED": "Контакт установлен",
+      "QUALIFIED": "Квалифицирован",
+      "PROPOSAL_SENT": "Предложение отправлено",
+      "NEGOTIATION": "Переговоры",
+      "WON": "Выиграно",
+      "LOST": "Проигрыш"
+    },
+    "sources": {
+      "WEBSITE": "Сайт",
+      "PHONE": "Телефон",
+      "REFERRAL": "Рекомендация",
+      "EMAIL": "Эл. почта",
+      "TENDER": "Тендер",
+      "SOCIAL": "Соц. сети"
+    },
+    "activityKinds": {
+      "NOTE": "Заметка",
+      "CALL": "Звонок",
+      "EMAIL": "Эл. почта",
+      "MEETING": "Встреча",
+      "STATUS_CHANGE": "Смена статуса"
+    }
+  },
+  "contacts": {
+    "title": "Контакты",
+    "description": "Все контакты по клиентам",
+    "newContact": "Новый контакт",
+    "newContactDescription": "Добавьте контактное лицо к клиенту",
+    "created": "Контакт создан",
+    "updated": "Контакт обновлён",
+    "deleted": "Контакт удалён",
+    "empty": "Нет контактов",
+    "emptyDescription": "Добавьте контактные лица к клиентам.",
+    "position": "Должность",
+    "customer": "Клиент",
+    "selectCustomer": "Выберите клиента"
   }
 }

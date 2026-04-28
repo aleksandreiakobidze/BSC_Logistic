@@ -1,5 +1,6 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
-import { Building2, Plus } from "lucide-react";
+import Link from "next/link";
+import { Building2 } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireOrg } from "@/lib/actions";
 import { PageHeader } from "@/components/app/page-header";
@@ -53,7 +54,9 @@ export default async function CustomersPage({ params }: { params: Promise<{ loca
                 {customers.map((c) => (
                   <TableRow key={c.id}>
                     <TableCell>
-                      <div className="font-medium">{c.name}</div>
+                      <Link href={`/customers/${c.id}`} className="font-medium hover:underline">
+                        {c.name}
+                      </Link>
                       {c.code && (
                         <div className="text-xs text-muted-foreground">{c.code}</div>
                       )}
