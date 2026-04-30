@@ -1,11 +1,14 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
+import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { requireOrg } from "@/lib/actions";
 import { PageHeader } from "@/components/app/page-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { FileText, ArrowRight, SlidersHorizontal } from "lucide-react";
 import { InviteUserButton } from "./invite-user-button";
 import { OrgForm } from "./org-form";
 import { NewBranchButton } from "./new-branch-button";
@@ -32,6 +35,44 @@ export default async function SettingsPage({ params }: { params: Promise<{ local
   return (
     <div className="space-y-6">
       <PageHeader title={t("settings.title")} />
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Invoice Designer card */}
+        <Card className="border-primary/20 bg-primary/5">
+          <CardHeader className="flex flex-row items-center gap-4 pb-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <FileText className="h-5 w-5 text-primary" />
+            </div>
+            <div className="flex-1">
+              <CardTitle className="text-base">{t("invoiceDesigner.title")}</CardTitle>
+              <CardDescription className="text-xs">{t("invoiceDesigner.description")}</CardDescription>
+            </div>
+            <Button asChild size="sm" variant="outline" className="shrink-0 gap-1">
+              <Link href={`/${locale}/settings/invoice-designer`}>
+                {t("invoiceDesigner.open")} <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </CardHeader>
+        </Card>
+
+        {/* Custom Fields card */}
+        <Card className="border-violet-500/20 bg-violet-500/5">
+          <CardHeader className="flex flex-row items-center gap-4 pb-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/10">
+              <SlidersHorizontal className="h-5 w-5 text-violet-500" />
+            </div>
+            <div className="flex-1">
+              <CardTitle className="text-base">{t("customFields.title")}</CardTitle>
+              <CardDescription className="text-xs">{t("customFields.description")}</CardDescription>
+            </div>
+            <Button asChild size="sm" variant="outline" className="shrink-0 gap-1">
+              <Link href={`/${locale}/settings/custom-fields`}>
+                {t("customFields.open")} <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </CardHeader>
+        </Card>
+      </div>
 
       <Tabs defaultValue="org">
         <TabsList className="w-full max-w-xl">

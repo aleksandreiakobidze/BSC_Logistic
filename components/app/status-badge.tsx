@@ -1,5 +1,13 @@
 import { Badge } from "@/components/ui/badge";
-import type { ShipmentStatus, OrderStatus, InvoiceStatus, VehicleStatus, DriverStatus } from "@/lib/enums";
+import type {
+  ShipmentStatus,
+  OrderStatus,
+  InvoiceStatus,
+  VehicleStatus,
+  DriverStatus,
+  QuotationStatus,
+  CustomerStatus,
+} from "@/lib/enums";
 
 type Variant = "default" | "secondary" | "destructive" | "success" | "warning" | "outline" | "muted";
 
@@ -24,6 +32,7 @@ const order: Record<OrderStatus, Variant> = {
 const invoice: Record<InvoiceStatus, Variant> = {
   DRAFT: "muted",
   SENT: "default",
+  PARTIAL: "warning",
   PAID: "success",
   OVERDUE: "destructive",
   CANCELLED: "muted",
@@ -42,7 +51,31 @@ const driver: Record<DriverStatus, Variant> = {
   SUSPENDED: "destructive",
 };
 
-const variants = { shipment, order, invoice, vehicle, driver } as const;
+const quotation: Record<QuotationStatus, Variant> = {
+  DRAFT: "muted",
+  SENT: "default",
+  ACCEPTED: "success",
+  REJECTED: "destructive",
+  EXPIRED: "warning",
+  CONVERTED: "success",
+  CANCELLED: "muted",
+};
+
+const customer: Record<CustomerStatus, Variant> = {
+  PROSPECT: "warning",
+  ACTIVE: "success",
+  INACTIVE: "muted",
+};
+
+const variants = {
+  shipment,
+  order,
+  invoice,
+  vehicle,
+  driver,
+  quotation,
+  customer,
+} as const;
 
 export function StatusBadge({
   kind,

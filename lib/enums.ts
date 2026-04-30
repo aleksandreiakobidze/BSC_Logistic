@@ -101,11 +101,18 @@ export type MovementKind = (typeof MovementKind)[keyof typeof MovementKind];
 export const InvoiceStatus = {
   DRAFT: "DRAFT",
   SENT: "SENT",
+  PARTIAL: "PARTIAL",
   PAID: "PAID",
   OVERDUE: "OVERDUE",
   CANCELLED: "CANCELLED",
 } as const;
 export type InvoiceStatus = (typeof InvoiceStatus)[keyof typeof InvoiceStatus];
+
+export const PaymentKind = {
+  RECEIVABLE: "RECEIVABLE",
+  SETTLEMENT_PAYOUT: "SETTLEMENT_PAYOUT",
+} as const;
+export type PaymentKind = (typeof PaymentKind)[keyof typeof PaymentKind];
 
 export const PaymentMethod = {
   CASH: "CASH",
@@ -157,3 +164,29 @@ export const ActivityKind = {
   STATUS_CHANGE: "STATUS_CHANGE",
 } as const;
 export type ActivityKind = (typeof ActivityKind)[keyof typeof ActivityKind];
+
+export const LeadPriority = {
+  LOW: "LOW",
+  MEDIUM: "MEDIUM",
+  HIGH: "HIGH",
+  URGENT: "URGENT",
+} as const;
+export type LeadPriority = (typeof LeadPriority)[keyof typeof LeadPriority];
+
+export const CustomerStatus = {
+  PROSPECT: "PROSPECT",
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE",
+} as const;
+export type CustomerStatus = (typeof CustomerStatus)[keyof typeof CustomerStatus];
+
+export const QuotationStatus = {
+  DRAFT: "DRAFT",
+  SENT: "SENT",
+  ACCEPTED: "ACCEPTED",
+  REJECTED: "REJECTED",
+  EXPIRED: "EXPIRED",
+  CONVERTED: "CONVERTED",
+  CANCELLED: "CANCELLED",
+} as const;
+export type QuotationStatus = (typeof QuotationStatus)[keyof typeof QuotationStatus];

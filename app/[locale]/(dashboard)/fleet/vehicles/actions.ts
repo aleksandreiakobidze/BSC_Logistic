@@ -6,6 +6,8 @@ import { prisma } from "@/lib/db";
 import { requireOrg } from "@/lib/actions";
 import { audit } from "@/lib/audit";
 import { VehicleStatus, VehicleType } from "@/lib/enums";
+import { CustomFieldEntity } from "@/lib/custom-fields";
+import { saveCustomFieldValues } from "../../settings/custom-fields/actions";
 
 const schema = z.object({
   plate: z.string().min(1),
@@ -43,6 +45,12 @@ export async function createVehicle(formData: FormData) {
       fuelType: data.fuelType || null,
       notes: data.notes || null,
     },
+  });
+  await saveCustomFieldValues({
+    orgId,
+    entityType: CustomFieldEntity.VEHICLE,
+    recordId: v.id,
+    formData,
   });
   await audit({ action: "vehicle.create", entity: "Vehicle", entityId: v.id, orgId, userId: session.user.id });
   revalidatePath("/fleet/vehicles");

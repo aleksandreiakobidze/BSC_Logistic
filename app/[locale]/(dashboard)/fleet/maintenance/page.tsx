@@ -8,15 +8,38 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { EmptyState } from "@/components/app/empty-state";
+import { ListFilters } from "@/components/app/list-filters";
+import { MaintenanceKind } from "@/lib/enums";
 
-export default async function MaintenancePage({ params }: { params: Promise<{ locale: string }> }) {
+const KIND_OPTIONS = Object.values(MaintenanceKind).map((k) => ({ label: k, value: k }));
+
+export default async function MaintenancePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams?: Promise<Record<string, string>>;
+}) {
   const { locale } = await params;
+  const sp = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations();
   const { orgId } = await requireOrg();
 
+  const q = sp?.q?.trim() ?? "";
+  const kind = sp?.kind ?? "";
+
   const records = await prisma.maintenance.findMany({
-    where: { vehicle: { orgId } },
+    where: {
+      vehicle: { orgId },
+      ...(kind ? { kind } : {}),
+      ...(q ? {
+        OR: [
+          { description: { contains: q } },
+          { vehicle: { plate: { contains: q } } },
+        ],
+      } : {}),
+    },
     include: { vehicle: true },
     orderBy: [{ dueDate: "asc" }, { createdAt: "desc" }],
   });
@@ -24,6 +47,13 @@ export default async function MaintenancePage({ params }: { params: Promise<{ lo
   return (
     <div className="space-y-6">
       <PageHeader title={t("nav.maintenance")} />
+
+      <ListFilters
+        searchPlaceholder="Search plate or description…"
+        filters={[
+          { key: "kind", label: "Kind", type: "select", options: KIND_OPTIONS },
+        ]}
+      />
 
       {records.length === 0 ? (
         <EmptyState

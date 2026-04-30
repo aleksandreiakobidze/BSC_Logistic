@@ -23,6 +23,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CustomFieldsForm } from "@/components/app/custom-fields/custom-fields-form";
+import type { CustomFieldDefinitionView } from "@/lib/custom-fields";
 import { createContact } from "./actions";
 
 type Customer = { id: string; name: string };
@@ -30,9 +32,11 @@ type Customer = { id: string; name: string };
 export function NewContactButton({
   customers,
   defaultCustomerId,
+  customFields = [],
 }: {
   customers: Customer[];
   defaultCustomerId?: string;
+  customFields?: CustomFieldDefinitionView[];
 }) {
   const t = useTranslations();
   const [open, setOpen] = React.useState(false);
@@ -104,6 +108,7 @@ export function NewContactButton({
               <Input name="phone" />
             </Field>
           </div>
+          <CustomFieldsForm definitions={customFields} />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {t("common.cancel")}

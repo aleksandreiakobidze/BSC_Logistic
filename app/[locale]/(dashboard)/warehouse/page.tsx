@@ -8,12 +8,26 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/app/empty-state";
 import { formatDateTime } from "@/lib/utils";
+import { ListFilters } from "@/components/app/list-filters";
+import { MovementKind } from "@/lib/enums";
 
-export default async function WarehousePage({ params }: { params: Promise<{ locale: string }> }) {
+const MOVEMENT_OPTIONS = Object.values(MovementKind).map((k) => ({ label: k, value: k }));
+
+export default async function WarehousePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams?: Promise<Record<string, string>>;
+}) {
   const { locale } = await params;
+  const sp = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations();
   const { orgId } = await requireOrg();
+
+  const q = sp?.q?.trim() ?? "";
+  const movementKind = sp?.kind ?? "";
 
   const [warehouses, items, movements] = await Promise.all([
     prisma.warehouse.findMany({
@@ -21,13 +35,31 @@ export default async function WarehousePage({ params }: { params: Promise<{ loca
       include: { _count: { select: { bins: true } } },
     }),
     prisma.stockItem.findMany({
-      where: { orgId },
+      where: {
+        orgId,
+        ...(q ? {
+          OR: [
+            { sku: { contains: q } },
+            { name: { contains: q } },
+          ],
+        } : {}),
+      },
       include: { movements: true },
     }),
     prisma.stockMovement.findMany({
-      where: { warehouse: { orgId } },
+      where: {
+        warehouse: { orgId },
+        ...(movementKind ? { kind: movementKind } : {}),
+        ...(q ? {
+          OR: [
+            { item: { sku: { contains: q } } },
+            { item: { name: { contains: q } } },
+            { warehouse: { name: { contains: q } } },
+          ],
+        } : {}),
+      },
       orderBy: { at: "desc" },
-      take: 25,
+      take: 50,
       include: { warehouse: true, item: true },
     }),
   ]);
@@ -45,6 +77,13 @@ export default async function WarehousePage({ params }: { params: Promise<{ loca
   return (
     <div className="space-y-6">
       <PageHeader title={t("warehouse.title")} />
+
+      <ListFilters
+        searchPlaceholder="Search SKU or item name…"
+        filters={[
+          { key: "kind", label: "Movement", type: "select", options: MOVEMENT_OPTIONS },
+        ]}
+      />
 
       {warehouses.length === 0 ? (
         <EmptyState

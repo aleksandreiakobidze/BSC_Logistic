@@ -17,9 +17,15 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { CustomFieldsForm } from "@/components/app/custom-fields/custom-fields-form";
+import type { CustomFieldDefinitionView } from "@/lib/custom-fields";
 import { createCustomer } from "./actions";
 
-export function NewCustomerButton() {
+export function NewCustomerButton({
+  customFields = [],
+}: {
+  customFields?: CustomFieldDefinitionView[];
+}) {
   const t = useTranslations();
   const [open, setOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
@@ -88,6 +94,7 @@ export function NewCustomerButton() {
               <Textarea name="notes" rows={3} />
             </Field>
           </div>
+          <CustomFieldsForm definitions={customFields} />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {t("common.cancel")}

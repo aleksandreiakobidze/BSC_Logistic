@@ -6,6 +6,8 @@ import { prisma } from "@/lib/db";
 import { requireOrg } from "@/lib/actions";
 import { audit } from "@/lib/audit";
 import { DriverStatus } from "@/lib/enums";
+import { CustomFieldEntity } from "@/lib/custom-fields";
+import { saveCustomFieldValues } from "../settings/custom-fields/actions";
 
 const schema = z.object({
   firstName: z.string().min(1),
@@ -35,6 +37,12 @@ export async function createDriver(formData: FormData) {
       payRatePerKm: data.payRatePerKm,
       payRateFlat: data.payRateFlat,
     },
+  });
+  await saveCustomFieldValues({
+    orgId,
+    entityType: CustomFieldEntity.DRIVER,
+    recordId: d.id,
+    formData,
   });
   await audit({ action: "driver.create", entity: "Driver", entityId: d.id, orgId, userId: session.user.id });
   revalidatePath("/drivers");

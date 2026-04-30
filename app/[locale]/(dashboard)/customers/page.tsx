@@ -10,18 +10,43 @@ import { formatCurrency } from "@/lib/utils";
 import { EmptyState } from "@/components/app/empty-state";
 import { NewCustomerButton } from "./new-customer-button";
 import { ExportButton } from "@/components/app/export-button";
+import { CustomFieldEntity } from "@/lib/custom-fields";
+import { getCustomFieldDefinitions } from "../settings/custom-fields/actions";
+import { ListFilters } from "@/components/app/list-filters";
 
-export default async function CustomersPage({ params }: { params: Promise<{ locale: string }> }) {
+export default async function CustomersPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams?: Promise<Record<string, string>>;
+}) {
   const { locale } = await params;
+  const sp = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations();
   const { orgId } = await requireOrg();
 
-  const customers = await prisma.customer.findMany({
-    where: { orgId },
-    orderBy: { createdAt: "desc" },
-    include: { _count: { select: { orders: true, invoices: true } } },
-  });
+  const q = sp?.q?.trim() ?? "";
+
+  const [customers, customFields] = await Promise.all([
+    prisma.customer.findMany({
+      where: {
+        orgId,
+        ...(q ? {
+          OR: [
+            { name: { contains: q } },
+            { email: { contains: q } },
+            { phone: { contains: q } },
+            { code: { contains: q } },
+          ],
+        } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      include: { _count: { select: { orders: true, invoices: true } } },
+    }),
+    getCustomFieldDefinitions(orgId, CustomFieldEntity.CUSTOMER),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -30,17 +55,19 @@ export default async function CustomersPage({ params }: { params: Promise<{ loca
         actions={
           <>
             <ExportButton entity="customers" />
-            <NewCustomerButton />
+            <NewCustomerButton customFields={customFields} />
           </>
         }
       />
+
+      <ListFilters searchPlaceholder="Search customers…" />
 
       {customers.length === 0 ? (
         <EmptyState
           icon={Building2}
           title="No customers yet"
           description="Add your first customer to start creating orders and invoices."
-          action={<NewCustomerButton />}
+          action={<NewCustomerButton customFields={customFields} />}
         />
       ) : (
         <Card>

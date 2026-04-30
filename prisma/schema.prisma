@@ -23,9 +23,10 @@ model Organization {
   name         String
   slug         String   @unique
   logoUrl      String?
-  baseCurrency String   @default("USD")
-  locale       String   @default("en")
-  createdAt    DateTime @default(now())
+  baseCurrency    String   @default("USD")
+  locale          String   @default("en")
+  invoiceTemplate String?
+  createdAt       DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   branches   Branch[]
@@ -36,6 +37,7 @@ model Organization {
   drivers    Driver[]
   orders     Order[]
   shipments  Shipment[]
+  trips      Trip[]
   invoices   Invoice[]
   expenses   Expense[]
   warehouses Warehouse[]
@@ -43,6 +45,54 @@ model Organization {
   documents  Document[]
   auditLogs  AuditLog[]
   leads      Lead[]
+  contacts   Contact[]
+  payments   Payment[]
+  settlements Settlement[]
+  quotations Quotation[]
+  customFieldDefinitions CustomFieldDefinition[]
+  customFieldValues      CustomFieldValue[]
+}
+
+model CustomFieldDefinition {
+  id             String   @id @default(cuid())
+  orgId          String
+  entityType     String
+  key            String
+  label          String
+  type           String
+  required       Boolean  @default(false)
+  defaultValue   String?
+  helpText       String?
+  placeholder    String?
+  optionsJson    String?
+  validationJson String?
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  values       CustomFieldValue[]
+
+  @@unique([orgId, entityType, key])
+  @@index([orgId, entityType, isActive])
+}
+
+model CustomFieldValue {
+  id           String   @id @default(cuid())
+  orgId        String
+  definitionId String
+  entityType   String
+  recordId     String
+  valueJson    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  organization Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  definition   CustomFieldDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  @@unique([definitionId, recordId])
+  @@index([orgId, entityType, recordId])
 }
 
 model Branch {
@@ -89,6 +139,9 @@ model User {
   invitations    Invitation[]    @relation("InvitedBy")
   auditLogs      AuditLog[]
   assignedLeads  Lead[]          @relation("AssignedLeads")
+  assignedLeadTasks LeadTask[]   @relation("AssignedLeadTasks")
+  createdPayments Payment[]      @relation("CreatedPayments")
+  ownedQuotations Quotation[]    @relation("OwnedQuotations")
 
   @@index([orgId])
   @@index([role])
@@ -150,21 +203,23 @@ model Invitation {
 // ============================================================================
 
 model Customer {
-  id          String   @id @default(cuid())
-  orgId       String
-  name        String
-  code        String?
-  email       String?
-  phone       String?
-  taxId       String?
-  address     String?
-  city        String?
-  country     String?
-  creditLimit Decimal  @default(0)
-  balance     Decimal  @default(0)
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id               String    @id @default(cuid())
+  orgId            String
+  name             String
+  code             String?
+  status           String    @default("PROSPECT") // PROSPECT | ACTIVE | INACTIVE
+  email            String?
+  phone            String?
+  taxId            String?
+  address          String?
+  city             String?
+  country          String?
+  creditLimit      Decimal   @default(0)
+  balance          Decimal   @default(0)
+  notes            String?
+  firstActivatedAt DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   contacts     Contact[]
@@ -172,21 +227,33 @@ model Customer {
   invoices     Invoice[]
   users        User[]
   leads        Lead[]
+  payments     Payment[]
+  quotations   Quotation[]
 
   @@unique([orgId, code])
   @@index([orgId])
+  @@index([status])
 }
 
 model Contact {
-  id         String  @id @default(cuid())
-  customerId String
+  id         String   @id @default(cuid())
+  orgId      String
+  customerId String?
   name       String
   position   String?
   email      String?
   phone      String?
+  company    String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  leads        Lead[]
+  quotations   Quotation[]
 
+  @@index([orgId])
   @@index([customerId])
 }
 
@@ -218,6 +285,8 @@ model Vehicle {
   maintenance  Maintenance[]
   fuelRecords  FuelRecord[]
   shipments    Shipment[]
+  trips        Trip[]
+  expenses     Expense[]
 
   @@unique([orgId, plate])
   @@index([orgId])
@@ -295,8 +364,11 @@ model Driver {
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
   shipments    Shipment[]
+  trips        Trip[]
   fuelRecords  FuelRecord[]
   settlements  Settlement[]
+  expenses     Expense[]
+  payments     Payment[]
 
   @@index([orgId])
 }
@@ -306,32 +378,58 @@ model Driver {
 // ============================================================================
 
 model Order {
-  id          String    @id @default(cuid())
-  orgId       String
-  number      String
-  status      String    @default("QUOTE")
-  customerId  String
-  reference   String?
-  price       Decimal   @default(0)
-  currency    String    @default("USD")
-  notes       String?
-  requestedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id                 String    @id @default(cuid())
+  orgId              String
+  number             String
+  status             String    @default("QUOTE")
+  customerId         String
+  leadId             String?
+  sourceQuotationId  String?
+  reference          String?
+  price              Decimal   @default(0)
+  currency           String    @default("USD")
+  notes              String?
+  requestedAt        DateTime?
+  confirmedAt        DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  customer     Customer     @relation(fields: [customerId], references: [id])
-  shipments    Shipment[]
-  invoices     Invoice[]
+  organization      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer          Customer     @relation(fields: [customerId], references: [id])
+  lead              Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  sourceQuotation   Quotation?   @relation("QuotationConvertedOrders", fields: [sourceQuotationId], references: [id], onDelete: SetNull)
+  shipments         Shipment[]
+  invoices          Invoice[]
+  invoiceLines      InvoiceLine[]
+  expenses          Expense[]
+  expenseAllocations ExpenseAllocation[]
+  lines             OrderLine[]
 
   @@unique([orgId, number])
   @@index([status])
+  @@index([leadId])
+  @@index([sourceQuotationId])
+}
+
+model OrderLine {
+  id          String  @id @default(cuid())
+  orderId     String
+  description String
+  quantity    Decimal @default(1)
+  unitPrice   Decimal @default(0)
+  total       Decimal @default(0)
+  sortOrder   Int     @default(0)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
 }
 
 model Shipment {
   id                String    @id @default(cuid())
   orgId             String
   orderId           String
+  tripId            String?
   number            String
   trackingCode      String    @unique
   status            String    @default("PLANNED")
@@ -353,15 +451,52 @@ model Shipment {
 
   organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
   order        Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  trip         Trip?           @relation(fields: [tripId], references: [id], onDelete: SetNull)
   driver       Driver?         @relation(fields: [driverId], references: [id], onDelete: SetNull)
   vehicle      Vehicle?        @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
   stops        Stop[]
   events       ShipmentEvent[]
   pods         POD[]
+  expenses     Expense[]
 
   @@unique([orgId, number])
   @@index([status])
   @@index([driverId])
+  @@index([tripId])
+}
+
+// ============================================================================
+// Trips — a truck run that can carry multiple shipments (orders)
+// ============================================================================
+
+model Trip {
+  id              String    @id @default(cuid())
+  orgId           String
+  number          String
+  status          String    @default("PLANNED")
+  driverId        String?
+  vehicleId       String?
+  plannedStart    DateTime?
+  plannedEnd      DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  totalDistanceKm Float?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  driver       Driver?       @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  vehicle      Vehicle?      @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  shipments    Shipment[]
+  expenses     Expense[]
+  invoiceLines InvoiceLine[]
+
+  @@unique([orgId, number])
+  @@index([orgId])
+  @@index([status])
+  @@index([driverId])
+  @@index([vehicleId])
 }
 
 model Stop {
@@ -518,27 +653,59 @@ model Invoice {
 model InvoiceLine {
   id          String  @id @default(cuid())
   invoiceId   String
+  kind        String  @default("MANUAL") // ORDER | EXPENSE | TRIP | MANUAL
   description String
   quantity    Decimal @default(1)
   unitPrice   Decimal
   total       Decimal
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  // Source references (optional, depending on kind)
+  orderId   String?
+  tripId    String?
+
+  invoice  Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  order    Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  trip     Trip?     @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  expenses Expense[]
 
   @@index([invoiceId])
+  @@index([orderId])
+  @@index([tripId])
 }
 
 model Payment {
-  id        String   @id @default(cuid())
-  invoiceId String
-  amount    Decimal
-  method    String   @default("BANK")
-  reference String?
-  paidAt    DateTime @default(now())
+  id           String   @id @default(cuid())
+  orgId        String
+  kind         String   @default("RECEIVABLE") // RECEIVABLE | SETTLEMENT_PAYOUT
+  amount       Decimal
+  currency     String   @default("USD")
+  method       String   @default("BANK")
+  reference    String?
+  note         String?
+  paidAt       DateTime @default(now())
 
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId    String?
+  customerId   String?
+  settlementId String?
+  driverId     String?
+  createdById  String?
 
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invoice      Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  settlement   Settlement?  @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  driver       Driver?      @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  createdBy    User?        @relation("CreatedPayments", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, paidAt])
+  @@index([orgId, kind])
   @@index([invoiceId])
+  @@index([settlementId])
+  @@index([customerId])
+  @@index([driverId])
 }
 
 model Expense {
@@ -552,13 +719,53 @@ model Expense {
   incurredAt  DateTime @default(now())
   createdAt   DateTime @default(now())
 
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  // Scope (one-of, optional). When tripId is set and orderId is null,
+  // the expense is trip-level and can be allocated to orders via ExpenseAllocation.
+  orderId    String?
+  tripId     String?
+  shipmentId String?
+  driverId   String?
+  vehicleId  String?
+
+  // Billing flow
+  billable      Boolean @default(false)
+  invoiceLineId String?
+
+  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  order        Order?              @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  trip         Trip?               @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  shipment     Shipment?           @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
+  driver       Driver?             @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  vehicle      Vehicle?            @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  invoiceLine  InvoiceLine?        @relation(fields: [invoiceLineId], references: [id], onDelete: SetNull)
+  allocations  ExpenseAllocation[]
 
   @@index([orgId])
+  @@index([orderId])
+  @@index([tripId])
+  @@index([shipmentId])
+  @@index([driverId])
+  @@index([vehicleId])
+}
+
+model ExpenseAllocation {
+  id        String   @id @default(cuid())
+  expenseId String
+  orderId   String
+  amount    Decimal
+  method    String // MANUAL | WEIGHT | VOLUME | DISTANCE | REVENUE | EQUAL
+  createdAt DateTime @default(now())
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([expenseId, orderId])
+  @@index([orderId])
 }
 
 model Settlement {
   id         String    @id @default(cuid())
+  orgId      String
   driverId   String
   periodFrom DateTime
   periodTo   DateTime
@@ -566,12 +773,19 @@ model Settlement {
   gross      Decimal   @default(0)
   deductions Decimal   @default(0)
   net        Decimal   @default(0)
+  currency   String    @default("USD")
+  notes      String?
   paidAt     DateTime?
   createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
-  driver Driver @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  driver       Driver       @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  payments     Payment[]
 
+  @@index([orgId])
   @@index([driverId])
+  @@index([paidAt])
 }
 
 // ============================================================================
@@ -632,6 +846,64 @@ model Notification {
 }
 
 // ============================================================================
+// Sales — Quotations
+// ============================================================================
+
+model Quotation {
+  id          String    @id @default(cuid())
+  orgId       String
+  number      String
+  status      String    @default("DRAFT") // DRAFT | SENT | ACCEPTED | REJECTED | EXPIRED | CONVERTED | CANCELLED
+  customerId  String
+  contactId   String?
+  leadId      String?
+  ownerId     String?
+  currency    String    @default("USD")
+  subtotal    Decimal   @default(0)
+  taxRate     Decimal   @default(0)
+  taxAmount   Decimal   @default(0)
+  discount    Decimal   @default(0)
+  total       Decimal   @default(0)
+  validUntil  DateTime?
+  notes       String?
+  rejectReason String?
+  sentAt      DateTime?
+  acceptedAt  DateTime?
+  rejectedAt  DateTime?
+  convertedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  organization     Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer         Customer        @relation(fields: [customerId], references: [id])
+  contact          Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  lead             Lead?           @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  owner            User?           @relation("OwnedQuotations", fields: [ownerId], references: [id], onDelete: SetNull)
+  lines            QuotationLine[]
+  convertedOrders  Order[]         @relation("QuotationConvertedOrders")
+
+  @@unique([orgId, number])
+  @@index([orgId, status])
+  @@index([customerId])
+  @@index([leadId])
+  @@index([ownerId])
+}
+
+model QuotationLine {
+  id          String  @id @default(cuid())
+  quotationId String
+  description String
+  quantity    Decimal @default(1)
+  unitPrice   Decimal @default(0)
+  total       Decimal @default(0)
+  sortOrder   Int     @default(0)
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId])
+}
+
+// ============================================================================
 // CRM — Leads
 // ============================================================================
 
@@ -645,8 +917,11 @@ model Lead {
   status         String    @default("NEW")
   source         String?
   assignedToId   String?
+  contactId      String?
   estimatedValue Decimal   @default(0)
   currency       String    @default("USD")
+  score          Int       @default(0)
+  priority       String    @default("MEDIUM")
   nextFollowUp   DateTime?
   notes          String?
   lostReason     String?
@@ -658,11 +933,17 @@ model Lead {
   organization Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
   assignedTo   User?          @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
   customer     Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  contact      Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
   activities   LeadActivity[]
+  tasks        LeadTask[]
+  orders       Order[]
+  quotations   Quotation[]
 
   @@index([orgId])
   @@index([status])
   @@index([assignedToId])
+  @@index([contactId])
+  @@index([priority])
 }
 
 model LeadActivity {
@@ -676,4 +957,24 @@ model LeadActivity {
   lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@index([leadId])
+}
+
+model LeadTask {
+  id           String    @id @default(cuid())
+  leadId       String
+  title        String
+  dueAt        DateTime?
+  completedAt  DateTime?
+  assignedToId String?
+  priority     String    @default("MEDIUM")
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  lead       Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignedTo User? @relation("AssignedLeadTasks", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([dueAt])
+  @@index([assignedToId])
 }

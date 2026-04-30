@@ -23,9 +23,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CustomFieldsForm } from "@/components/app/custom-fields/custom-fields-form";
+import type { CustomFieldDefinitionView } from "@/lib/custom-fields";
 import { createOrder } from "./actions";
 
-export function NewOrderButton({ customers }: { customers: { id: string; name: string }[] }) {
+export function NewOrderButton({
+  customers,
+  customFields = [],
+}: {
+  customers: { id: string; name: string }[];
+  customFields?: CustomFieldDefinitionView[];
+}) {
   const t = useTranslations();
   const [open, setOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
@@ -125,6 +133,7 @@ export function NewOrderButton({ customers }: { customers: { id: string; name: s
               <Textarea name="notes" rows={2} />
             </Field>
           </div>
+          <CustomFieldsForm definitions={customFields} />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {t("common.cancel")}

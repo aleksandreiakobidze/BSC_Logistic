@@ -10,18 +10,49 @@ import { EmptyState } from "@/components/app/empty-state";
 import { formatDate } from "@/lib/utils";
 import { NewDriverButton } from "./new-driver-button";
 import { ExportButton } from "@/components/app/export-button";
+import { CustomFieldEntity } from "@/lib/custom-fields";
+import { getCustomFieldDefinitions } from "../settings/custom-fields/actions";
+import { ListFilters } from "@/components/app/list-filters";
+import { DriverStatus } from "@/lib/enums";
 
-export default async function DriversPage({ params }: { params: Promise<{ locale: string }> }) {
+const STATUS_OPTIONS = Object.values(DriverStatus).map((s) => ({ label: s.replace("_", " "), value: s }));
+
+export default async function DriversPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams?: Promise<Record<string, string>>;
+}) {
   const { locale } = await params;
+  const sp = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations();
   const { orgId } = await requireOrg();
 
-  const drivers = await prisma.driver.findMany({
-    where: { orgId },
-    orderBy: { createdAt: "desc" },
-    include: { _count: { select: { shipments: true } } },
-  });
+  const q = sp?.q?.trim() ?? "";
+  const status = sp?.status ?? "";
+
+  const [drivers, customFields] = await Promise.all([
+    prisma.driver.findMany({
+      where: {
+        orgId,
+        ...(status ? { status } : {}),
+        ...(q ? {
+          OR: [
+            { firstName: { contains: q } },
+            { lastName: { contains: q } },
+            { email: { contains: q } },
+            { licenseNo: { contains: q } },
+            { phone: { contains: q } },
+          ],
+        } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+      include: { _count: { select: { shipments: true } } },
+    }),
+    getCustomFieldDefinitions(orgId, CustomFieldEntity.DRIVER),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -30,9 +61,16 @@ export default async function DriversPage({ params }: { params: Promise<{ locale
         actions={
           <>
             <ExportButton entity="drivers" />
-            <NewDriverButton />
+            <NewDriverButton customFields={customFields} />
           </>
         }
+      />
+
+      <ListFilters
+        searchPlaceholder="Search drivers…"
+        filters={[
+          { key: "status", label: "Status", type: "select", options: STATUS_OPTIONS },
+        ]}
       />
 
       {drivers.length === 0 ? (
@@ -40,7 +78,7 @@ export default async function DriversPage({ params }: { params: Promise<{ locale
           icon={Users}
           title="No drivers yet"
           description="Add drivers to assign to shipments."
-          action={<NewDriverButton />}
+          action={<NewDriverButton customFields={customFields} />}
         />
       ) : (
         <Card>

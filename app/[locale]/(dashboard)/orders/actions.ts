@@ -7,6 +7,9 @@ import { requireOrg } from "@/lib/actions";
 import { audit } from "@/lib/audit";
 import { generateNumber, generateTrackingCode } from "@/lib/utils";
 import { OrderStatus, ShipmentStatus, StopKind } from "@/lib/enums";
+import { CustomFieldEntity } from "@/lib/custom-fields";
+import { saveCustomFieldValues } from "../settings/custom-fields/actions";
+import { applyOrderConfirmationSideEffects } from "../quotations/actions";
 
 const orderSchema = z.object({
   customerId: z.string().min(1),
@@ -40,6 +43,12 @@ export async function createOrder(formData: FormData) {
       reference: data.reference || null,
       notes: data.notes || null,
     },
+  });
+  await saveCustomFieldValues({
+    orgId,
+    entityType: CustomFieldEntity.ORDER,
+    recordId: order.id,
+    formData,
   });
 
   // Create an initial shipment with two stops
@@ -89,15 +98,50 @@ export async function createOrder(formData: FormData) {
 
 export async function updateOrderStatus(id: string, status: OrderStatus) {
   const { session, orgId } = await requireOrg();
-  await prisma.order.update({ where: { id, orgId }, data: { status } });
+
+  const isConfirmingOrLater =
+    status === OrderStatus.CONFIRMED ||
+    status === OrderStatus.IN_PROGRESS ||
+    status === OrderStatus.COMPLETED;
+
+  const sideEffects = await prisma.$transaction(async (tx) => {
+    const existing = await tx.order.findFirstOrThrow({
+      where: { id, orgId },
+      select: { id: true, status: true, confirmedAt: true },
+    });
+
+    await tx.order.update({
+      where: { id },
+      data: {
+        status,
+        confirmedAt:
+          isConfirmingOrLater && !existing.confirmedAt
+            ? new Date()
+            : existing.confirmedAt,
+      },
+    });
+
+    if (isConfirmingOrLater) {
+      return applyOrderConfirmationSideEffects(tx, id);
+    }
+    return { activatedCustomer: false, wonLead: false };
+  });
+
   await audit({
     action: "order.updateStatus",
     entity: "Order",
     entityId: id,
     orgId,
     userId: session.user.id,
-    meta: { status },
+    meta: {
+      status,
+      activatedCustomer: sideEffects.activatedCustomer,
+      wonLead: sideEffects.wonLead,
+    },
   });
   revalidatePath("/orders");
-  return { ok: true };
+  revalidatePath(`/orders/${id}`);
+  if (sideEffects.activatedCustomer) revalidatePath("/customers");
+  if (sideEffects.wonLead) revalidatePath("/leads");
+  return { ok: true, ...sideEffects };
 }

@@ -11,21 +11,47 @@ import { EmptyState } from "@/components/app/empty-state";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { NewOrderButton } from "./new-order-button";
 import { ExportButton } from "@/components/app/export-button";
+import { CustomFieldEntity } from "@/lib/custom-fields";
+import { getCustomFieldDefinitions } from "../settings/custom-fields/actions";
+import { ListFilters } from "@/components/app/list-filters";
+import { OrderStatus } from "@/lib/enums";
 
-export default async function OrdersPage({ params }: { params: Promise<{ locale: string }> }) {
+const STATUS_OPTIONS = Object.values(OrderStatus).map((s) => ({ label: s.replace("_", " "), value: s }));
+
+export default async function OrdersPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams?: Promise<Record<string, string>>;
+}) {
   const { locale } = await params;
+  const sp = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations();
   const { orgId } = await requireOrg();
 
-  const [orders, customers] = await Promise.all([
+  const q = sp?.q?.trim() ?? "";
+  const status = sp?.status ?? "";
+
+  const [orders, customers, customFields] = await Promise.all([
     prisma.order.findMany({
-      where: { orgId },
+      where: {
+        orgId,
+        ...(status ? { status } : {}),
+        ...(q ? {
+          OR: [
+            { number: { contains: q } },
+            { customer: { name: { contains: q } } },
+          ],
+        } : {}),
+      },
       orderBy: { createdAt: "desc" },
       include: { customer: true, _count: { select: { shipments: true } } },
       take: 200,
     }),
     prisma.customer.findMany({ where: { orgId }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    getCustomFieldDefinitions(orgId, CustomFieldEntity.ORDER),
   ]);
 
   return (
@@ -35,9 +61,16 @@ export default async function OrdersPage({ params }: { params: Promise<{ locale:
         actions={
           <>
             <ExportButton entity="orders" />
-            <NewOrderButton customers={customers} />
+            <NewOrderButton customers={customers} customFields={customFields} />
           </>
         }
+      />
+
+      <ListFilters
+        searchPlaceholder="Search by number or customer…"
+        filters={[
+          { key: "status", label: "Status", type: "select", options: STATUS_OPTIONS },
+        ]}
       />
 
       {orders.length === 0 ? (
@@ -45,7 +78,7 @@ export default async function OrdersPage({ params }: { params: Promise<{ locale:
           icon={Package}
           title="No orders yet"
           description="Create your first order to start dispatching."
-          action={<NewOrderButton customers={customers} />}
+          action={<NewOrderButton customers={customers} customFields={customFields} />}
         />
       ) : (
         <Card>

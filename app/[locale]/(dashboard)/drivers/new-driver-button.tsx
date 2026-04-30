@@ -22,9 +22,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { CustomFieldsForm } from "@/components/app/custom-fields/custom-fields-form";
+import type { CustomFieldDefinitionView } from "@/lib/custom-fields";
 import { createDriver } from "./actions";
 
-export function NewDriverButton() {
+export function NewDriverButton({
+  customFields = [],
+}: {
+  customFields?: CustomFieldDefinitionView[];
+}) {
   const t = useTranslations();
   const [open, setOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
@@ -93,6 +99,7 @@ export function NewDriverButton() {
               <Input name="payRatePerKm" type="number" step="0.01" defaultValue={0} />
             </Field>
           </div>
+          <CustomFieldsForm definitions={customFields} />
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>
               {t("common.cancel")}

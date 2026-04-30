@@ -13,6 +13,8 @@ const ALLOWED = [
   "customers",
   "contacts",
   "leads",
+  "payments",
+  "settlements",
 ] as const;
 type Entity = (typeof ALLOWED)[number];
 
@@ -206,14 +208,14 @@ async function fetchRows(entity: Entity, orgId: string): Promise<SheetRow[]> {
 
     case "contacts": {
       const data = await prisma.contact.findMany({
-        where: { customer: { orgId } },
+        where: { orgId },
         orderBy: { name: "asc" },
         include: { customer: { select: { name: true } } },
       });
       return data.map((c) => ({
         Name: c.name,
         Position: c.position ?? "",
-        Customer: c.customer.name,
+        Customer: c.customer?.name ?? c.company ?? "",
         Email: c.email ?? "",
         Phone: c.phone ?? "",
       }));
@@ -245,6 +247,55 @@ async function fetchRows(entity: Entity, orgId: string): Promise<SheetRow[]> {
         Activities: l._count.activities,
         Notes: l.notes ?? "",
         CreatedAt: l.createdAt.toISOString().slice(0, 10),
+      }));
+    }
+
+    case "payments": {
+      const data = await prisma.payment.findMany({
+        where: { orgId },
+        orderBy: { paidAt: "desc" },
+        include: {
+          invoice: { select: { number: true } },
+          customer: { select: { name: true } },
+          settlement: { select: { id: true } },
+          driver: { select: { firstName: true, lastName: true } },
+        },
+      });
+      return data.map((p) => ({
+        PaidAt: p.paidAt.toISOString().slice(0, 10),
+        Kind: p.kind,
+        Amount: Number(p.amount),
+        Currency: p.currency,
+        Method: p.method,
+        Reference: p.reference ?? "",
+        Invoice: p.invoice?.number ?? "",
+        Customer: p.customer?.name ?? "",
+        Settlement: p.settlement?.id ?? "",
+        Driver: p.driver
+          ? `${p.driver.firstName} ${p.driver.lastName}`
+          : "",
+        Note: p.note ?? "",
+      }));
+    }
+
+    case "settlements": {
+      const data = await prisma.settlement.findMany({
+        where: { orgId },
+        orderBy: { createdAt: "desc" },
+        include: { driver: true },
+      });
+      return data.map((s) => ({
+        Driver: `${s.driver.firstName} ${s.driver.lastName}`,
+        PeriodFrom: s.periodFrom.toISOString().slice(0, 10),
+        PeriodTo: s.periodTo.toISOString().slice(0, 10),
+        TotalKm: s.totalKm,
+        Gross: Number(s.gross),
+        Deductions: Number(s.deductions),
+        Net: Number(s.net),
+        Currency: s.currency,
+        Status: s.paidAt ? "PAID" : "UNPAID",
+        PaidAt: s.paidAt?.toISOString().slice(0, 10) ?? "",
+        CreatedAt: s.createdAt.toISOString().slice(0, 10),
       }));
     }
   }

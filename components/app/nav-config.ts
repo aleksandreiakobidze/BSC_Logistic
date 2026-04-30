@@ -14,6 +14,9 @@ import {
   Map,
   Route,
   UserPlus,
+  Wallet,
+  HandCoins,
+  FileSignature,
   type LucideIcon,
 } from "lucide-react";
 import type { Role } from "@/lib/enums";
@@ -41,6 +44,7 @@ export const navGroups: NavGroup[] = [
     items: [
       { href: "/orders", labelKey: "nav.orders", icon: Package },
       { href: "/shipments", labelKey: "nav.shipments", icon: Truck },
+      { href: "/trips", labelKey: "nav.trips", icon: Route, roles: ["ADMIN", "DISPATCHER"] },
       { href: "/dispatch", labelKey: "nav.dispatch", icon: Route, roles: ["ADMIN", "DISPATCHER"] },
       { href: "/tracking", labelKey: "nav.tracking", icon: Map },
     ],
@@ -51,6 +55,12 @@ export const navGroups: NavGroup[] = [
       { href: "/fleet/vehicles", labelKey: "nav.vehicles", icon: Truck },
       { href: "/fleet/maintenance", labelKey: "nav.maintenance", icon: Wrench },
       { href: "/drivers", labelKey: "nav.drivers", icon: Users },
+      {
+        href: "/drivers/settlements",
+        labelKey: "nav.settlements",
+        icon: HandCoins,
+        roles: ["ADMIN", "ACCOUNTANT"],
+      },
     ],
   },
   {
@@ -64,6 +74,12 @@ export const navGroups: NavGroup[] = [
         icon: UserPlus,
         roles: ["ADMIN", "DISPATCHER"],
       },
+      {
+        href: "/quotations",
+        labelKey: "nav.quotations",
+        icon: FileSignature,
+        roles: ["ADMIN", "DISPATCHER"],
+      },
       { href: "/warehouse", labelKey: "nav.warehouse", icon: Warehouse },
     ],
   },
@@ -71,6 +87,7 @@ export const navGroups: NavGroup[] = [
     labelKey: "nav.invoices",
     items: [
       { href: "/invoices", labelKey: "nav.invoices", icon: FileText, roles: ["ADMIN", "ACCOUNTANT", "DISPATCHER"] },
+      { href: "/payments", labelKey: "nav.payments", icon: Wallet, roles: ["ADMIN", "ACCOUNTANT"] },
       { href: "/expenses", labelKey: "nav.expenses", icon: Receipt, roles: ["ADMIN", "ACCOUNTANT"] },
       { href: "/reports", labelKey: "nav.reports", icon: BarChart3 },
     ],

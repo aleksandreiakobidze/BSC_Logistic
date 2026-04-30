@@ -177,8 +177,8 @@ async function main() {
   for (const c of customers) {
     await prisma.contact.createMany({
       data: [
-        { customerId: c.id, name: "Ops Manager", position: "Operations", email: `ops-${c.code}@example.com`, phone: "+995 555 20 20 20" },
-        { customerId: c.id, name: "Accounts Payable", position: "Finance", email: `ap-${c.code}@example.com`, phone: "+995 555 30 30 30" },
+        { orgId: org.id, customerId: c.id, name: "Ops Manager", position: "Operations", email: `ops-${c.code}@example.com`, phone: "+995 555 20 20 20" },
+        { orgId: org.id, customerId: c.id, name: "Accounts Payable", position: "Finance", email: `ap-${c.code}@example.com`, phone: "+995 555 30 30 30" },
       ],
     });
   }
@@ -704,8 +704,12 @@ async function main() {
     if (status === InvoiceStatus.PAID) {
       await prisma.payment.create({
         data: {
+          orgId: org.id,
+          kind: "RECEIVABLE",
           invoiceId: inv.id,
+          customerId: inv.customerId,
           amount: total,
+          currency: inv.currency,
           method: pick([PaymentMethod.BANK, PaymentMethod.CARD, PaymentMethod.CASH], i),
           reference: `PMT-${10000 + i}`,
           paidAt: daysAgo(randInt(1, 20)),
@@ -715,24 +719,21 @@ async function main() {
     if (status === InvoiceStatus.SENT && i === 7) {
       await prisma.payment.create({
         data: {
+          orgId: org.id,
+          kind: "RECEIVABLE",
           invoiceId: inv.id,
+          customerId: inv.customerId,
           amount: total / 2,
+          currency: inv.currency,
           method: PaymentMethod.BANK,
           reference: `PMT-PART-${i}`,
           paidAt: daysAgo(5),
         },
       });
-    }
-    if (status === InvoiceStatus.PAID && i % 2 === 0) {
-      await prisma.payment.create({
-        data: {
-          invoiceId: inv.id,
-          amount: Math.round(total * 0.1 * 100) / 100,
-          method: PaymentMethod.CASH,
-          reference: `PMT-FEE-${i}`,
-          paidAt: daysAgo(randInt(1, 15)),
-          // a small late-fee / topup record to bulk up history
-        },
+      // Mark this invoice as PARTIAL
+      await prisma.invoice.update({
+        where: { id: inv.id },
+        data: { status: "PARTIAL", paid: total / 2 },
       });
     }
   }
@@ -778,8 +779,10 @@ async function main() {
     const gross = totalKm * (0.3 + (i % 5) * 0.02);
     const deductions = Math.round(gross * 0.08 * 100) / 100;
     const net = Math.round((gross - deductions) * 100) / 100;
-    await prisma.settlement.create({
+    const paidAt = i < 8 ? daysAgo(10) : null;
+    const settlement = await prisma.settlement.create({
       data: {
+        orgId: org.id,
         driverId: driver.id,
         periodFrom: daysAgo(45),
         periodTo: daysAgo(15),
@@ -787,9 +790,25 @@ async function main() {
         gross,
         deductions,
         net,
-        paidAt: i < 8 ? daysAgo(10) : null,
+        currency: "USD",
+        paidAt,
       },
     });
+    if (paidAt) {
+      await prisma.payment.create({
+        data: {
+          orgId: org.id,
+          kind: "SETTLEMENT_PAYOUT",
+          settlementId: settlement.id,
+          driverId: driver.id,
+          amount: net,
+          currency: "USD",
+          method: pick([PaymentMethod.BANK, PaymentMethod.CASH], i),
+          reference: `PAYOUT-${1000 + i}`,
+          paidAt,
+        },
+      });
+    }
   }
 
   // ---------------------------------------------------------------------------

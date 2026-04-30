@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslations } from "next-intl";
 import {
   DndContext,
   DragOverlay,
@@ -13,6 +14,10 @@ import {
 import { useDroppable, useDraggable } from "@dnd-kit/core";
 import { toast } from "sonner";
 import { LeadStatusBadge } from "./lead-status-badge";
+import {
+  LeadPriorityBadge,
+  LeadScoreChip,
+} from "./lead-priority-badge";
 import { formatCurrency } from "@/lib/utils";
 import { updateLeadStatus } from "@/app/[locale]/(dashboard)/leads/actions";
 import { Building2, Calendar } from "lucide-react";
@@ -27,6 +32,8 @@ type PipelineLead = {
   estimatedValue: number;
   currency: string;
   nextFollowUp: Date | null;
+  priority: string;
+  score: number;
   assignedTo: { name: string | null } | null;
 };
 
@@ -115,6 +122,7 @@ function Column({
   leads: PipelineLead[];
   locale: string;
 }) {
+  const t = useTranslations();
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const total = leads.reduce((s, l) => s + l.estimatedValue, 0);
   const currency = leads[0]?.currency ?? "USD";
@@ -145,7 +153,7 @@ function Column({
         ))}
         {leads.length === 0 && (
           <div className="flex h-12 items-center justify-center text-xs text-muted-foreground">
-            Drop here
+            {t("leads.pipeline.dropHere")}
           </div>
         )}
       </div>
@@ -186,7 +194,13 @@ function LeadCard({
           if (dragging) e.preventDefault();
         }}
       >
-        <div className="text-sm font-medium leading-tight">{lead.name}</div>
+        <div className="flex items-start justify-between gap-1.5">
+          <div className="text-sm font-medium leading-tight">{lead.name}</div>
+          <div className="flex shrink-0 items-center gap-1">
+            <LeadPriorityBadge priority={lead.priority} showLabel={false} />
+            <LeadScoreChip score={lead.score} />
+          </div>
+        </div>
         {lead.company && (
           <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
             <Building2 className="h-3 w-3" />

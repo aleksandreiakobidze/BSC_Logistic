@@ -19,7 +19,9 @@ type Entity =
   | "vehicles"
   | "customers"
   | "contacts"
-  | "leads";
+  | "leads"
+  | "payments"
+  | "settlements";
 
 export function ExportButton({ entity }: { entity: Entity }) {
   const t = useTranslations("common");

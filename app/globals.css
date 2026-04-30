@@ -92,3 +92,9 @@
       radial-gradient(at 50% 80%, hsl(var(--warning) / 0.1) 0, transparent 55%);
   }
 }
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+}

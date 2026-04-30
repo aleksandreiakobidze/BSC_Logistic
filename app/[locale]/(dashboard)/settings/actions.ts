@@ -8,6 +8,7 @@ import { requireOrg, requireRole } from "@/lib/actions";
 import { audit } from "@/lib/audit";
 import { enqueueNotification } from "@/lib/queue";
 import { Role } from "@/lib/enums";
+import type { InvoiceTemplate } from "@/lib/invoice-template";
 
 const orgSchema = z.object({
   name: z.string().min(1),
@@ -86,5 +87,22 @@ export async function inviteUser(formData: FormData) {
     meta: { email: data.email, role: data.role },
   });
   revalidatePath("/settings");
+  return { ok: true };
+}
+
+export async function saveInvoiceTemplate(template: InvoiceTemplate) {
+  const { session, orgId } = await requireRole(["ADMIN"]);
+  await prisma.organization.update({
+    where: { id: orgId },
+    data: { invoiceTemplate: JSON.stringify(template) },
+  });
+  await audit({
+    action: "org.invoiceTemplate.save",
+    entity: "Organization",
+    entityId: orgId,
+    orgId,
+    userId: session.user.id,
+  });
+  revalidatePath("/settings/invoice-designer");
   return { ok: true };
 }

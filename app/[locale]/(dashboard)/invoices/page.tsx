@@ -10,17 +10,54 @@ import { StatusBadge } from "@/components/app/status-badge";
 import { EmptyState } from "@/components/app/empty-state";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { NewInvoiceButton } from "./new-invoice-button";
+import { InvoiceRowActions } from "./invoice-row-actions";
 import { ExportButton } from "@/components/app/export-button";
+import { CustomFieldEntity } from "@/lib/custom-fields";
+import { getCustomFieldDefinitions } from "../settings/custom-fields/actions";
+import { ListFilters } from "@/components/app/list-filters";
+import { InvoiceStatus } from "@/lib/enums";
+import { refreshOverdueInvoices } from "@/lib/payments";
 
-export default async function InvoicesPage({ params }: { params: Promise<{ locale: string }> }) {
+const STATUS_OPTIONS = Object.values(InvoiceStatus).map((s) => ({ label: s, value: s }));
+
+export default async function InvoicesPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams?: Promise<Record<string, string>>;
+}) {
   const { locale } = await params;
+  const sp = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations();
   const { orgId } = await requireOrg();
 
-  const [invoices, customers, orders] = await Promise.all([
+  await refreshOverdueInvoices(orgId);
+
+  const q = sp?.q?.trim() ?? "";
+  const status = sp?.status ?? "";
+  const dateFrom = sp?.dateFrom ?? "";
+  const dateTo = sp?.dateTo ?? "";
+
+  const [invoices, customers, orders, billableExpenses, tripsRaw, customFields] = await Promise.all([
     prisma.invoice.findMany({
-      where: { orgId },
+      where: {
+        orgId,
+        ...(status ? { status } : {}),
+        ...(dateFrom || dateTo ? {
+          issueDate: {
+            ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+            ...(dateTo ? { lte: new Date(dateTo + "T23:59:59.999Z") } : {}),
+          },
+        } : {}),
+        ...(q ? {
+          OR: [
+            { number: { contains: q } },
+            { customer: { name: { contains: q } } },
+          ],
+        } : {}),
+      },
       orderBy: { createdAt: "desc" },
       include: { customer: true },
       take: 200,
@@ -30,9 +67,55 @@ export default async function InvoicesPage({ params }: { params: Promise<{ local
       where: { orgId, status: { in: ["COMPLETED", "IN_PROGRESS", "CONFIRMED"] } },
       select: { id: true, number: true, price: true, currency: true, customerId: true },
       orderBy: { createdAt: "desc" },
-      take: 100,
+      take: 200,
     }),
+    prisma.expense.findMany({
+      where: {
+        orgId,
+        billable: true,
+        invoiceLineId: null,
+        OR: [
+          { orderId: { not: null } },
+          { allocations: { some: {} } },
+        ],
+      },
+      include: {
+        order: { select: { customerId: true } },
+        allocations: { include: { order: { select: { customerId: true } } } },
+      },
+    }),
+    prisma.trip.findMany({
+      where: { orgId },
+      select: {
+        id: true,
+        number: true,
+        shipments: { select: { order: { select: { customerId: true } } } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    }),
+    getCustomFieldDefinitions(orgId, CustomFieldEntity.INVOICE),
   ]);
+
+  const expenseOptions = billableExpenses.flatMap((e) => {
+    const customers = new Set<string>();
+    if (e.order?.customerId) customers.add(e.order.customerId);
+    for (const a of e.allocations) if (a.order?.customerId) customers.add(a.order.customerId);
+    return [...customers].map((cid) => ({
+      id: e.id,
+      description: e.description,
+      amount: Number(e.amount),
+      currency: e.currency,
+      category: e.category,
+      customerId: cid,
+    }));
+  });
+
+  const tripOptions = tripsRaw.map((tr) => ({
+    id: tr.id,
+    number: tr.number,
+    customerIds: [...new Set(tr.shipments.map((s) => s.order.customerId))],
+  }));
 
   return (
     <div className="space-y-6">
@@ -41,9 +124,24 @@ export default async function InvoicesPage({ params }: { params: Promise<{ local
         actions={
           <>
             <ExportButton entity="invoices" />
-            <NewInvoiceButton customers={customers} orders={orders.map((o) => ({ ...o, price: Number(o.price) }))} />
+            <NewInvoiceButton
+              customers={customers}
+              orders={orders.map((o) => ({ ...o, price: Number(o.price) }))}
+              expenses={expenseOptions}
+              trips={tripOptions}
+              customFields={customFields}
+            />
           </>
         }
+      />
+
+      <ListFilters
+        searchPlaceholder="Search by number or customer…"
+        filters={[
+          { key: "status", label: "Status", type: "select", options: STATUS_OPTIONS },
+          { key: "dateFrom", label: "From date", type: "date" },
+          { key: "dateTo", label: "To date", type: "date" },
+        ]}
       />
 
       {invoices.length === 0 ? (
@@ -51,7 +149,15 @@ export default async function InvoicesPage({ params }: { params: Promise<{ local
           icon={FileText}
           title="No invoices yet"
           description="Generate invoices for completed orders."
-          action={<NewInvoiceButton customers={customers} orders={orders.map((o) => ({ ...o, price: Number(o.price) }))} />}
+          action={
+            <NewInvoiceButton
+              customers={customers}
+              orders={orders.map((o) => ({ ...o, price: Number(o.price) }))}
+              expenses={expenseOptions}
+              trips={tripOptions}
+              customFields={customFields}
+            />
+          }
         />
       ) : (
         <Card>
@@ -65,33 +171,54 @@ export default async function InvoicesPage({ params }: { params: Promise<{ local
                   <TableHead>{t("invoices.dueDate")}</TableHead>
                   <TableHead>{t("common.status")}</TableHead>
                   <TableHead className="text-right">{t("invoices.total")}</TableHead>
-                  <TableHead className="text-right">PDF</TableHead>
+                  <TableHead className="text-right">{t("invoices.balanceDue")}</TableHead>
+                  <TableHead className="text-right">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {invoices.map((inv) => (
-                  <TableRow key={inv.id}>
-                    <TableCell className="font-medium">{inv.number}</TableCell>
-                    <TableCell>{inv.customer.name}</TableCell>
-                    <TableCell>{formatDate(inv.issueDate, locale)}</TableCell>
-                    <TableCell>{formatDate(inv.dueDate, locale)}</TableCell>
-                    <TableCell>
-                      <StatusBadge kind="invoice" status={inv.status} label={t(`invoices.status.${inv.status}`)} />
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-sm">
-                      {formatCurrency(Number(inv.total), inv.currency, locale)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Link
-                        className="text-xs font-medium text-primary hover:underline"
-                        href={`/api/invoices/${inv.id}/pdf`}
-                        target="_blank"
-                      >
-                        Download
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {invoices.map((inv) => {
+                  const total = Number(inv.total);
+                  const paid = Number(inv.paid);
+                  const balanceDue = Math.max(0, Math.round((total - paid) * 100) / 100);
+                  return (
+                    <TableRow key={inv.id}>
+                      <TableCell className="font-medium">
+                        <Link href={`/invoices/${inv.id}`} className="hover:underline">
+                          {inv.number}
+                        </Link>
+                      </TableCell>
+                      <TableCell>{inv.customer.name}</TableCell>
+                      <TableCell>{formatDate(inv.issueDate, locale)}</TableCell>
+                      <TableCell>{formatDate(inv.dueDate, locale)}</TableCell>
+                      <TableCell>
+                        <StatusBadge
+                          kind="invoice"
+                          status={inv.status}
+                          label={t(`invoices.status.${inv.status}`)}
+                        />
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        {formatCurrency(total, inv.currency, locale)}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">
+                        <span className={balanceDue > 0 ? "text-foreground" : "text-muted-foreground"}>
+                          {formatCurrency(balanceDue, inv.currency, locale)}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <InvoiceRowActions
+                          invoiceId={inv.id}
+                          invoiceNumber={inv.number}
+                          total={total}
+                          paid={paid}
+                          currency={inv.currency}
+                          status={inv.status}
+                          customerName={inv.customer.name}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </CardContent>

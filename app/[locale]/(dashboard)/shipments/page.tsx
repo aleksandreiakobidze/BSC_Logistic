@@ -9,15 +9,39 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { StatusBadge } from "@/components/app/status-badge";
 import { EmptyState } from "@/components/app/empty-state";
 import { formatDate } from "@/lib/utils";
+import { ListFilters } from "@/components/app/list-filters";
+import { ShipmentStatus } from "@/lib/enums";
 
-export default async function ShipmentsPage({ params }: { params: Promise<{ locale: string }> }) {
+const STATUS_OPTIONS = Object.values(ShipmentStatus).map((s) => ({ label: s.replace("_", " "), value: s }));
+
+export default async function ShipmentsPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams?: Promise<Record<string, string>>;
+}) {
   const { locale } = await params;
+  const sp = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations();
   const { orgId } = await requireOrg();
 
+  const q = sp?.q?.trim() ?? "";
+  const status = sp?.status ?? "";
+
   const shipments = await prisma.shipment.findMany({
-    where: { orgId },
+    where: {
+      orgId,
+      ...(status ? { status } : {}),
+      ...(q ? {
+        OR: [
+          { number: { contains: q } },
+          { trackingCode: { contains: q } },
+          { order: { customer: { name: { contains: q } } } },
+        ],
+      } : {}),
+    },
     orderBy: { createdAt: "desc" },
     include: {
       order: { include: { customer: true } },
@@ -31,6 +55,13 @@ export default async function ShipmentsPage({ params }: { params: Promise<{ loca
   return (
     <div className="space-y-6">
       <PageHeader title={t("shipments.title")} />
+
+      <ListFilters
+        searchPlaceholder="Search number, tracking or customer…"
+        filters={[
+          { key: "status", label: "Status", type: "select", options: STATUS_OPTIONS },
+        ]}
+      />
 
       {shipments.length === 0 ? (
         <EmptyState

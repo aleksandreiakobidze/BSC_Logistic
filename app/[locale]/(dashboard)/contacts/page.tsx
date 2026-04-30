@@ -16,6 +16,8 @@ import { EmptyState } from "@/components/app/empty-state";
 import { NewContactButton } from "./new-contact-button";
 import { ExportButton } from "@/components/app/export-button";
 import Link from "next/link";
+import { CustomFieldEntity } from "@/lib/custom-fields";
+import { getCustomFieldDefinitions } from "../settings/custom-fields/actions";
 
 export default async function ContactsPage({
   params,
@@ -30,19 +32,18 @@ export default async function ContactsPage({
   const t = await getTranslations();
   const { orgId } = await requireOrg();
 
-  const [contacts, customers] = await Promise.all([
+  const [contacts, customers, customFields] = await Promise.all([
     prisma.contact.findMany({
       where: {
-        customer: {
-          orgId,
-          ...(customerId ? { id: customerId } : {}),
-        },
+        orgId,
+        ...(customerId ? { customerId } : {}),
         ...(q
           ? {
               OR: [
                 { name: { contains: q } },
                 { email: { contains: q } },
                 { position: { contains: q } },
+                { company: { contains: q } },
               ],
             }
           : {}),
@@ -57,6 +58,7 @@ export default async function ContactsPage({
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
+    getCustomFieldDefinitions(orgId, CustomFieldEntity.CONTACT),
   ]);
 
   return (
@@ -67,7 +69,7 @@ export default async function ContactsPage({
         actions={
           <>
             <ExportButton entity="contacts" />
-            <NewContactButton customers={customers} />
+            <NewContactButton customers={customers} customFields={customFields} />
           </>
         }
       />
@@ -77,7 +79,7 @@ export default async function ContactsPage({
           icon={Users2}
           title={t("contacts.empty")}
           description={t("contacts.emptyDescription")}
-          action={<NewContactButton customers={customers} />}
+          action={<NewContactButton customers={customers} customFields={customFields} />}
         />
       ) : (
         <Card>
@@ -100,13 +102,20 @@ export default async function ContactsPage({
                       {contact.position ?? "—"}
                     </TableCell>
                     <TableCell>
-                      <Link
-                        href={`/customers/${contact.customer.id}`}
-                        className="flex items-center gap-1.5 text-sm hover:underline"
-                      >
-                        <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
-                        {contact.customer.name}
-                      </Link>
+                      {contact.customer ? (
+                        <Link
+                          href={`/customers/${contact.customer.id}`}
+                          className="flex items-center gap-1.5 text-sm hover:underline"
+                        >
+                          <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
+                          {contact.customer.name}
+                        </Link>
+                      ) : (
+                        <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                          <Building2 className="h-3.5 w-3.5" />
+                          {contact.company ?? "—"}
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {contact.email ? (

@@ -15,28 +15,67 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { LeadStatus, LeadSource } from "@/lib/enums";
+import { DateTimePicker } from "@/components/ui/date-time-picker";
+import { LeadStatus, LeadSource, LeadPriority } from "@/lib/enums";
+import { CustomFieldsForm } from "@/components/app/custom-fields/custom-fields-form";
+import type {
+  CustomFieldDefinitionView,
+  CustomFieldValueMap,
+} from "@/lib/custom-fields";
+import {
+  ContactPicker,
+  type ContactSnapshot,
+} from "@/components/app/contact-picker";
 import { updateLead } from "../actions";
-import type { Lead, User } from "@prisma/client";
+import type { Lead, User, Contact } from "@prisma/client";
 
-type LeadWithAssigned = Lead & { assignedTo: Pick<User, "id" | "name"> | null };
+type LeadWithRelations = Lead & {
+  assignedTo: Pick<User, "id" | "name"> | null;
+  contact: Pick<
+    Contact,
+    "id" | "name" | "email" | "phone" | "company"
+  > | null;
+};
 
 const STATUS_OPTIONS = Object.values(LeadStatus);
 const SOURCE_OPTIONS = Object.values(LeadSource);
+const PRIORITY_OPTIONS = Object.values(LeadPriority);
+const UNASSIGNED = "__none__";
 
 export function EditLeadForm({
   lead,
   users,
+  customFields = [],
+  customFieldValues = {},
 }: {
-  lead: LeadWithAssigned;
+  lead: LeadWithRelations;
   users: Pick<User, "id" | "name">[];
+  customFields?: CustomFieldDefinitionView[];
+  customFieldValues?: CustomFieldValueMap;
 }) {
   const t = useTranslations();
   const [loading, setLoading] = React.useState(false);
   const [status, setStatus] = React.useState(lead.status);
   const [source, setSource] = React.useState(lead.source ?? "");
+  const [priority, setPriority] = React.useState(
+    lead.priority ?? LeadPriority.MEDIUM,
+  );
   const [assignedToId, setAssignedToId] = React.useState(
-    lead.assignedToId ?? "",
+    lead.assignedToId ?? UNASSIGNED,
+  );
+  const [contact, setContact] = React.useState<ContactSnapshot | undefined>(
+    lead.contact
+      ? {
+          id: lead.contact.id,
+          name: lead.contact.name,
+          email: lead.contact.email,
+          phone: lead.contact.phone,
+          company: lead.contact.company,
+        }
+      : undefined,
+  );
+  const [followUp, setFollowUp] = React.useState<Date | undefined>(
+    lead.nextFollowUp ? new Date(lead.nextFollowUp) : undefined,
   );
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -44,7 +83,16 @@ export function EditLeadForm({
     const fd = new FormData(e.currentTarget);
     fd.set("status", status);
     fd.set("source", source);
-    fd.set("assignedToId", assignedToId);
+    fd.set("priority", priority);
+    if (assignedToId && assignedToId !== UNASSIGNED) {
+      fd.set("assignedToId", assignedToId);
+    } else {
+      fd.delete("assignedToId");
+    }
+    if (contact?.id) fd.set("contactId", contact.id);
+    else fd.delete("contactId");
+    if (followUp) fd.set("nextFollowUp", followUp.toISOString());
+    else fd.delete("nextFollowUp");
     setLoading(true);
     try {
       await updateLead(lead.id, fd);
@@ -58,6 +106,14 @@ export function EditLeadForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
+      <Field label={t("leads.contact")}>
+        <ContactPicker
+          value={contact?.id}
+          initialContact={contact}
+          onChange={setContact}
+        />
+      </Field>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label={t("common.name")} className="sm:col-span-2">
           <Input name="name" required defaultValue={lead.name} />
@@ -107,12 +163,29 @@ export function EditLeadForm({
             </SelectContent>
           </Select>
         </Field>
+        <Field label={t("leads.priority")}>
+          <Select value={priority} onValueChange={setPriority}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PRIORITY_OPTIONS.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {t(`leads.priorities.${p}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
         <Field label={t("leads.assignedTo")}>
           <Select value={assignedToId} onValueChange={setAssignedToId}>
             <SelectTrigger>
               <SelectValue placeholder={t("leads.unassigned")} />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value={UNASSIGNED}>
+                — {t("leads.unassigned")} —
+              </SelectItem>
               {users.map((u) => (
                 <SelectItem key={u.id} value={u.id}>
                   {u.name ?? u.id}
@@ -121,21 +194,27 @@ export function EditLeadForm({
             </SelectContent>
           </Select>
         </Field>
-        <Field label={t("leads.nextFollowUp")}>
+        <Field label={t("leads.score")}>
           <Input
-            name="nextFollowUp"
-            type="date"
-            defaultValue={
-              lead.nextFollowUp
-                ? new Date(lead.nextFollowUp).toISOString().slice(0, 10)
-                : ""
-            }
+            name="score"
+            type="number"
+            min={0}
+            max={100}
+            step={1}
+            defaultValue={lead.score ?? 0}
+          />
+        </Field>
+        <Field label={t("leads.nextFollowUp")}>
+          <DateTimePicker
+            value={followUp}
+            onChange={setFollowUp}
+            placeholder={t("leads.nextFollowUp")}
           />
         </Field>
         <Field label={t("common.notes")} className="sm:col-span-2">
           <Textarea name="notes" rows={4} defaultValue={lead.notes ?? ""} />
         </Field>
-        {status === "LOST" && (
+        {status === LeadStatus.LOST && (
           <Field label={t("leads.lostReason")} className="sm:col-span-2">
             <Textarea
               name="lostReason"
@@ -145,6 +224,7 @@ export function EditLeadForm({
           </Field>
         )}
       </div>
+      <CustomFieldsForm definitions={customFields} values={customFieldValues} />
       <div className="flex justify-end">
         <Button type="submit" disabled={loading}>
           {loading ? (

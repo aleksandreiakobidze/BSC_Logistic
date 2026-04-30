@@ -1,0 +1,74 @@
+import { setRequestLocale, getTranslations } from "next-intl/server";
+import { prisma } from "@/lib/db";
+import { requireRole } from "@/lib/actions";
+import { PageHeader } from "@/components/app/page-header";
+import {
+  customFieldEntities,
+  parseOptions,
+  parseValidation,
+  type CustomFieldDefinitionView,
+  type CustomFieldEntity,
+  type CustomFieldType,
+} from "@/lib/custom-fields";
+import { CustomFieldsBuilder } from "./custom-fields-builder";
+
+function toView(definition: {
+  id: string;
+  entityType: string;
+  key: string;
+  label: string;
+  type: string;
+  required: boolean;
+  defaultValue: string | null;
+  helpText: string | null;
+  placeholder: string | null;
+  optionsJson: string | null;
+  validationJson: string | null;
+  sortOrder: number;
+  isActive: boolean;
+}): CustomFieldDefinitionView {
+  return {
+    id: definition.id,
+    entityType: definition.entityType as CustomFieldEntity,
+    key: definition.key,
+    label: definition.label,
+    type: definition.type as CustomFieldType,
+    required: definition.required,
+    defaultValue: definition.defaultValue ?? undefined,
+    helpText: definition.helpText ?? undefined,
+    placeholder: definition.placeholder ?? undefined,
+    options: parseOptions(definition.optionsJson),
+    validation: parseValidation(definition.validationJson),
+    sortOrder: definition.sortOrder,
+    isActive: definition.isActive,
+  };
+}
+
+export default async function CustomFieldsPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  setRequestLocale(locale);
+  const t = await getTranslations();
+  const { orgId } = await requireRole(["ADMIN"]);
+
+  const definitions = await prisma.customFieldDefinition.findMany({
+    where: { orgId },
+    orderBy: [{ entityType: "asc" }, { sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title={t("customFields.title")}
+        description={t("customFields.description")}
+      />
+      <CustomFieldsBuilder
+        entities={customFieldEntities}
+        initialDefinitions={definitions.map(toView)}
+      />
+    </div>
+  );
+}

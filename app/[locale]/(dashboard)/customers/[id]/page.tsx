@@ -30,6 +30,12 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/app/status-badge";
 import { NewContactButton } from "@/app/[locale]/(dashboard)/contacts/new-contact-button";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { CustomFieldsDisplay } from "@/components/app/custom-fields/custom-fields-display";
+import { CustomFieldEntity } from "@/lib/custom-fields";
+import {
+  getCustomFieldDefinitions,
+  getCustomFieldValues,
+} from "../../settings/custom-fields/actions";
 
 export default async function CustomerDetailPage({
   params,
@@ -41,39 +47,45 @@ export default async function CustomerDetailPage({
   const t = await getTranslations();
   const { orgId } = await requireOrg();
 
-  const customer = await prisma.customer.findFirst({
-    where: { id, orgId },
-    include: {
-      contacts: { orderBy: { name: "asc" } },
-      orders: {
-        orderBy: { createdAt: "desc" },
-        take: 20,
-        select: {
-          id: true,
-          number: true,
-          status: true,
-          price: true,
-          currency: true,
-          createdAt: true,
+  const [customer, customerCustomFields, customerCustomFieldValues, contactCustomFields] =
+    await Promise.all([
+      prisma.customer.findFirst({
+        where: { id, orgId },
+        include: {
+          contacts: { orderBy: { name: "asc" } },
+          orders: {
+            orderBy: { createdAt: "desc" },
+            take: 20,
+            select: {
+              id: true,
+              number: true,
+              status: true,
+              price: true,
+              currency: true,
+              createdAt: true,
+            },
+          },
+          invoices: {
+            orderBy: { issueDate: "desc" },
+            take: 20,
+            select: {
+              id: true,
+              number: true,
+              status: true,
+              total: true,
+              paid: true,
+              currency: true,
+              dueDate: true,
+              issueDate: true,
+            },
+          },
+          _count: { select: { orders: true, invoices: true, contacts: true } },
         },
-      },
-      invoices: {
-        orderBy: { issueDate: "desc" },
-        take: 20,
-        select: {
-          id: true,
-          number: true,
-          status: true,
-          total: true,
-          paid: true,
-          currency: true,
-          dueDate: true,
-          issueDate: true,
-        },
-      },
-      _count: { select: { orders: true, invoices: true, contacts: true } },
-    },
-  });
+      }),
+      getCustomFieldDefinitions(orgId, CustomFieldEntity.CUSTOMER),
+      getCustomFieldValues(orgId, CustomFieldEntity.CUSTOMER, id),
+      getCustomFieldDefinitions(orgId, CustomFieldEntity.CONTACT),
+    ]);
 
   if (!customer) notFound();
 
@@ -125,6 +137,10 @@ export default async function CustomerDetailPage({
           </Card>
         ))}
       </div>
+      <CustomFieldsDisplay
+        definitions={customerCustomFields}
+        values={customerCustomFieldValues}
+      />
 
       <div className="grid gap-6 lg:grid-cols-4">
         {/* Sidebar — info */}
@@ -240,6 +256,7 @@ export default async function CustomerDetailPage({
                   <NewContactButton
                     customers={customers}
                     defaultCustomerId={customer.id}
+                    customFields={contactCustomFields}
                   />
                 </CardHeader>
                 <CardContent className="p-0">

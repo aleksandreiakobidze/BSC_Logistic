@@ -9,17 +9,49 @@ import { StatusBadge } from "@/components/app/status-badge";
 import { EmptyState } from "@/components/app/empty-state";
 import { NewVehicleButton } from "./new-vehicle-button";
 import { ExportButton } from "@/components/app/export-button";
+import { CustomFieldEntity } from "@/lib/custom-fields";
+import { getCustomFieldDefinitions } from "../../settings/custom-fields/actions";
+import { ListFilters } from "@/components/app/list-filters";
+import { VehicleStatus, VehicleType } from "@/lib/enums";
 
-export default async function VehiclesPage({ params }: { params: Promise<{ locale: string }> }) {
+const STATUS_OPTIONS = Object.values(VehicleStatus).map((s) => ({ label: s, value: s }));
+const TYPE_OPTIONS = Object.values(VehicleType).map((t) => ({ label: t, value: t }));
+
+export default async function VehiclesPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ locale: string }>;
+  searchParams?: Promise<Record<string, string>>;
+}) {
   const { locale } = await params;
+  const sp = await searchParams;
   setRequestLocale(locale);
   const t = await getTranslations();
   const { orgId } = await requireOrg();
 
-  const vehicles = await prisma.vehicle.findMany({
-    where: { orgId },
-    orderBy: { createdAt: "desc" },
-  });
+  const q = sp?.q?.trim() ?? "";
+  const status = sp?.status ?? "";
+  const type = sp?.type ?? "";
+
+  const [vehicles, customFields] = await Promise.all([
+    prisma.vehicle.findMany({
+      where: {
+        orgId,
+        ...(status ? { status } : {}),
+        ...(type ? { type } : {}),
+        ...(q ? {
+          OR: [
+            { plate: { contains: q } },
+            { make: { contains: q } },
+            { model: { contains: q } },
+          ],
+        } : {}),
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    getCustomFieldDefinitions(orgId, CustomFieldEntity.VEHICLE),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -28,9 +60,17 @@ export default async function VehiclesPage({ params }: { params: Promise<{ local
         actions={
           <>
             <ExportButton entity="vehicles" />
-            <NewVehicleButton />
+            <NewVehicleButton customFields={customFields} />
           </>
         }
+      />
+
+      <ListFilters
+        searchPlaceholder="Search plate, make, model…"
+        filters={[
+          { key: "status", label: "Status", type: "select", options: STATUS_OPTIONS },
+          { key: "type", label: "Type", type: "select", options: TYPE_OPTIONS },
+        ]}
       />
 
       {vehicles.length === 0 ? (
@@ -38,7 +78,7 @@ export default async function VehiclesPage({ params }: { params: Promise<{ local
           icon={Truck}
           title="No vehicles yet"
           description="Add vehicles to your fleet to start dispatching shipments."
-          action={<NewVehicleButton />}
+          action={<NewVehicleButton customFields={customFields} />}
         />
       ) : (
         <Card>

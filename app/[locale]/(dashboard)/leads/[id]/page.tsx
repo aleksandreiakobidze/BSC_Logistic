@@ -1,18 +1,14 @@
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import {
   ArrowLeft,
   Building2,
   Mail,
   Phone,
   Calendar,
-  MessageSquare,
-  PhoneCall,
-  Video,
-  Clock,
-  GitBranch,
-  TrendingUp,
+  Package,
+  UserCircle2,
 } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireOrg } from "@/lib/actions";
@@ -21,10 +17,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { LeadStatusBadge } from "@/components/app/lead-status-badge";
+import {
+  LeadPriorityBadge,
+  LeadScoreChip,
+} from "@/components/app/lead-priority-badge";
 import { EditLeadForm } from "./edit-lead-form";
 import { ActivityTimeline } from "./activity-timeline";
-import { ConvertButton } from "./convert-button";
+import { QualificationWizard } from "./qualification-wizard";
+import { LeadTasks } from "./lead-tasks";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { CustomFieldsDisplay } from "@/components/app/custom-fields/custom-fields-display";
+import { CustomFieldEntity } from "@/lib/custom-fields";
+import {
+  getCustomFieldDefinitions,
+  getCustomFieldValues,
+} from "../../settings/custom-fields/actions";
 
 export default async function LeadDetailPage({
   params,
@@ -36,7 +43,7 @@ export default async function LeadDetailPage({
   const t = await getTranslations();
   const { orgId } = await requireOrg();
 
-  const [lead, users] = await Promise.all([
+  const [lead, users, customFields, customFieldValues] = await Promise.all([
     prisma.lead.findFirst({
       where: { id, orgId },
       include: {
@@ -46,6 +53,17 @@ export default async function LeadDetailPage({
           include: { lead: false },
         },
         customer: { select: { id: true, name: true } },
+        contact: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            company: true,
+          },
+        },
+        tasks: { orderBy: [{ completedAt: "asc" }, { dueAt: "asc" }] },
+        orders: { select: { id: true, number: true, status: true, price: true } },
       },
     }),
     prisma.user.findMany({
@@ -53,6 +71,8 @@ export default async function LeadDetailPage({
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
+    getCustomFieldDefinitions(orgId, CustomFieldEntity.LEAD),
+    getCustomFieldValues(orgId, CustomFieldEntity.LEAD, id),
   ]);
 
   if (!lead) notFound();
@@ -70,6 +90,8 @@ export default async function LeadDetailPage({
             </Link>
             {lead.name}
             <LeadStatusBadge status={lead.status} />
+            <LeadPriorityBadge priority={lead.priority} />
+            <LeadScoreChip score={lead.score} />
           </span>
         }
         description={lead.company ?? undefined}
@@ -84,7 +106,28 @@ export default async function LeadDetailPage({
               </Button>
             ) : (
               lead.status !== "LOST" && (
-                <ConvertButton leadId={lead.id} leadName={lead.name} />
+                <QualificationWizard
+                  lead={{
+                    id: lead.id,
+                    name: lead.name,
+                    email: lead.email ?? null,
+                    phone: lead.phone ?? null,
+                    company: lead.company ?? null,
+                    notes: lead.notes ?? null,
+                    estimatedValue: Number(lead.estimatedValue),
+                    currency: lead.currency,
+                    contact: lead.contact
+                      ? {
+                          id: lead.contact.id,
+                          name: lead.contact.name,
+                          email: lead.contact.email,
+                          phone: lead.contact.phone,
+                          company: lead.contact.company,
+                        }
+                      : null,
+                    customer: null,
+                  }}
+                />
               )
             )}
           </div>
@@ -101,6 +144,23 @@ export default async function LeadDetailPage({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
+              {lead.contact && (
+                <div className="flex items-start gap-2 rounded-lg border bg-muted/40 p-2">
+                  <UserCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium">{lead.contact.name}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {[
+                        lead.contact.email,
+                        lead.contact.phone,
+                        lead.contact.company,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ") || "—"}
+                    </div>
+                  </div>
+                </div>
+              )}
               {lead.email && (
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Mail className="h-4 w-4 shrink-0" />
@@ -136,6 +196,18 @@ export default async function LeadDetailPage({
                   )}
                 </span>
               </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">
+                  {t("leads.priority")}
+                </span>
+                <LeadPriorityBadge priority={lead.priority} />
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">
+                  {t("leads.score")}
+                </span>
+                <LeadScoreChip score={lead.score} />
+              </div>
               {lead.source && (
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">
@@ -170,6 +242,53 @@ export default async function LeadDetailPage({
               )}
             </CardContent>
           </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm font-medium">
+                {t("leads.tasks.title")}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <LeadTasks leadId={lead.id} tasks={lead.tasks} users={users} />
+            </CardContent>
+          </Card>
+
+          {lead.orders.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">
+                  {t("orders.title")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {lead.orders.map((o) => (
+                  <Link
+                    key={o.id}
+                    href={`/orders/${o.id}`}
+                    className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm hover:bg-accent"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Package className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-mono">{o.number}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {o.status}
+                      </span>
+                    </span>
+                    <span className="font-mono text-xs">
+                      {formatCurrency(Number(o.price), lead.currency, locale)}
+                    </span>
+                  </Link>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          <CustomFieldsDisplay
+            definitions={customFields}
+            values={customFieldValues}
+            currency={lead.currency}
+          />
         </div>
 
         {/* Right — edit form + activity */}
@@ -181,7 +300,12 @@ export default async function LeadDetailPage({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <EditLeadForm lead={lead} users={users} />
+              <EditLeadForm
+                lead={lead}
+                users={users}
+                customFields={customFields}
+                customFieldValues={customFieldValues}
+              />
             </CardContent>
           </Card>
 
