@@ -14,3 +14,5 @@ coverage
 playwright-report
 test-results
 prisma/.migrations-lock
+prisma/prod.db
+prisma/prod.db-journal

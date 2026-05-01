@@ -11,15 +11,15 @@ if (!url) {
 
 const connection = new IORedis(url, { maxRetriesPerRequest: null });
 
-type EmailJob = { to: string; subject: string; html: string; text?: string };
+type EmailJob = { to: string; subject: string; html: string };
 type SmsJob = { to: string; body: string };
 
 const worker = new Worker(
   "notifications",
   async (job: Job) => {
     if (job.name === "email") {
-      const { to, subject, html, text } = job.data as EmailJob;
-      await sendEmail({ to, subject, html, text });
+      const { to, subject, html } = job.data as EmailJob;
+      await sendEmail({ to, subject, html });
       return { ok: true };
     }
     if (job.name === "sms") {

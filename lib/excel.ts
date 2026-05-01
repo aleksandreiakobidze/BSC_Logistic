@@ -43,7 +43,9 @@ export function xlsxResponse(
   filename: string,
 ): Response {
   const buf = workbookToBuffer(wb);
-  return new Response(buf, {
+  // Wrap in Uint8Array — `Response` accepts BodyInit but the global Buffer
+  // type is too narrow under recent @types/node.
+  return new Response(new Uint8Array(buf), {
     headers: {
       "Content-Type":
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

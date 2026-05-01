@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "prebuild": "prisma generate",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -12,8 +13,12 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
+    "db:deploy": "prisma db push --skip-generate",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
+    "build:prod": "npm run db:deploy && prisma generate && next build && node scripts/copy-standalone-assets.mjs",
+    "start:prod": "node .next/standalone/server.js",
+    "start:next": "next start -p 3000",
     "worker": "tsx workers/index.ts",
     "test": "vitest",
     "test:e2e": "playwright test"

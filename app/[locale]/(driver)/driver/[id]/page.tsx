@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/app/status-badge";
 import { formatDateTime } from "@/lib/utils";
 import { DriverShipmentActions } from "./actions-ui";
+import type { ShipmentStatus } from "@/lib/enums";
 
 export default async function DriverShipmentPage({
   params,
@@ -79,7 +80,7 @@ export default async function DriverShipmentPage({
         </CardContent>
       </Card>
 
-      <DriverShipmentActions shipmentId={s.id} status={s.status} />
+      <DriverShipmentActions shipmentId={s.id} status={s.status as ShipmentStatus} />
 
       <Card>
         <CardHeader><CardTitle>Timeline</CardTitle></CardHeader>

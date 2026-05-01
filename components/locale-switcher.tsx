@@ -24,7 +24,6 @@ export function LocaleSwitcher() {
   const pathname = usePathname();
 
   const switchTo = (next: string) => {
-    // @ts-expect-error next-intl typed routing
     router.replace(pathname, { locale: next });
   };
 

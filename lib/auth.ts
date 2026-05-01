@@ -24,7 +24,9 @@ declare module "next-auth" {
   }
 }
 
-declare module "next-auth/jwt" {
+// next-auth v5 reexports JWT types from @auth/core/jwt; augment there to keep
+// `token.role` (and friends) typed on both the jwt() and session() callbacks.
+declare module "@auth/core/jwt" {
   interface JWT {
     id?: string;
     role?: Role;
@@ -73,7 +75,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           email: user.email,
           name: user.name,
           image: user.image,
-          role: user.role,
+          role: user.role as Role,
           orgId: user.orgId,
           customerId: user.customerId,
           locale: user.locale,
@@ -94,11 +96,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     },
     async session({ session, token }) {
       if (token && session.user) {
-        session.user.id = token.id!;
-        session.user.role = token.role!;
-        session.user.orgId = token.orgId;
-        session.user.customerId = token.customerId;
-        session.user.locale = token.locale;
+        session.user.id = (token.id ?? "") as string;
+        session.user.role = (token.role ?? "DISPATCHER") as Role;
+        session.user.orgId = (token.orgId ?? null) as string | null;
+        session.user.customerId = (token.customerId ?? null) as string | null;
+        session.user.locale = (token.locale ?? null) as string | null;
       }
       return session;
     },
