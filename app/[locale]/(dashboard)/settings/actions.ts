@@ -9,6 +9,7 @@ import { audit } from "@/lib/audit";
 import { enqueueNotification } from "@/lib/queue";
 import { Role } from "@/lib/enums";
 import type { InvoiceTemplate } from "@/lib/invoice-template";
+import { parseTemplate } from "@/lib/invoice-template";
 
 const orgSchema = z.object({
   name: z.string().min(1),
@@ -90,14 +91,106 @@ export async function inviteUser(formData: FormData) {
   return { ok: true };
 }
 
+const blockSchema = z.object({
+  id: z.enum([
+    "header",
+    "billTo",
+    "details",
+    "table",
+    "totals",
+    "payments",
+    "notes",
+    "paymentTerms",
+    "bankDetails",
+    "footer",
+  ]),
+  label: z.string(),
+  visible: z.boolean(),
+  fontSize: z.number().int().min(6).max(48),
+  fontWeight: z.enum(["normal", "medium", "bold"]),
+  color: z.string(),
+  bgColor: z.string(),
+  align: z.enum(["left", "center", "right"]),
+});
+
+const lineColumnsSchema = z.object({
+  qty: z.boolean(),
+  unitPrice: z.boolean(),
+  taxRate: z.boolean(),
+  discount: z.boolean(),
+  lineTotal: z.boolean(),
+});
+
+const labelsSchema = z
+  .object({
+    invoice: z.string().optional(),
+    billTo: z.string().optional(),
+    qty: z.string().optional(),
+    unitPrice: z.string().optional(),
+    description: z.string().optional(),
+    taxRate: z.string().optional(),
+    discount: z.string().optional(),
+    lineTotal: z.string().optional(),
+    subtotal: z.string().optional(),
+    tax: z.string().optional(),
+    total: z.string().optional(),
+    paid: z.string().optional(),
+    balance: z.string().optional(),
+    notes: z.string().optional(),
+    paymentTerms: z.string().optional(),
+    bankDetails: z.string().optional(),
+    issueDate: z.string().optional(),
+    dueDate: z.string().optional(),
+    invoiceNumber: z.string().optional(),
+  })
+  .partial();
+
+const templateSchema = z.object({
+  primaryColor: z.string(),
+  accentColor: z.string(),
+  pageSize: z.enum(["A4", "Letter"]),
+  fontFamily: z.enum(["Helvetica", "Times-Roman", "Courier"]),
+  showLogo: z.boolean(),
+  logoPosition: z.enum(["left", "right"]),
+  footerText: z.string().default(""),
+  notes: z.string().default(""),
+  paymentTerms: z.string().default(""),
+  bankDetails: z.string().default(""),
+  lineColumns: lineColumnsSchema,
+  labels: labelsSchema.default({}),
+  signature: z.object({ enabled: z.boolean(), label: z.string() }),
+  blocks: z.array(blockSchema),
+});
+
 export async function saveInvoiceTemplate(template: InvoiceTemplate) {
   const { session, orgId } = await requireRole(["ADMIN"]);
+  // Re-run through parseTemplate so partial updates from the autosave path
+  // always merge cleanly with defaults before zod validates.
+  const merged = parseTemplate(JSON.stringify(template));
+  const parsed = templateSchema.parse(merged);
   await prisma.organization.update({
     where: { id: orgId },
-    data: { invoiceTemplate: JSON.stringify(template) },
+    data: { invoiceTemplate: JSON.stringify(parsed) },
   });
   await audit({
     action: "org.invoiceTemplate.save",
+    entity: "Organization",
+    entityId: orgId,
+    orgId,
+    userId: session.user.id,
+  });
+  revalidatePath("/settings/invoice-designer");
+  return { ok: true };
+}
+
+export async function updateOrganizationLogo(logoUrl: string | null) {
+  const { session, orgId } = await requireRole(["ADMIN"]);
+  await prisma.organization.update({
+    where: { id: orgId },
+    data: { logoUrl: logoUrl?.trim() || null },
+  });
+  await audit({
+    action: "org.logo.update",
     entity: "Organization",
     entityId: orgId,
     orgId,

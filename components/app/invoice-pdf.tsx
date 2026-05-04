@@ -1,7 +1,32 @@
+// NOTE: This file intentionally uses `React.createElement` instead of JSX.
+//
+// In Next.js 15 App Router, .tsx files imported by route handlers get compiled
+// with the *RSC* JSX runtime (`next/dist/.../vendored.react-rsc.ReactJsxRuntime`),
+// while the surrounding route handler uses the regular React runtime. The two
+// runtimes produce React elements with different internal shapes, and the
+// `@react-pdf/renderer` reconciler walks a mixed tree and rejects it with
+// "Minified React error #31".
+//
+// Using `React.createElement` here ensures we depend only on the same `react`
+// module the caller uses, avoiding the runtime split.
+
 import React from "react";
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
-import type { InvoiceTemplate } from "@/lib/invoice-template";
-import { DEFAULT_TEMPLATE, parseTemplate } from "@/lib/invoice-template";
+import {
+  Document,
+  Page,
+  Text,
+  View,
+  Image,
+  StyleSheet,
+} from "@react-pdf/renderer";
+import type {
+  BlockId,
+  InvoiceTemplate,
+  LabelKey,
+} from "@/lib/invoice-template";
+import { DEFAULT_TEMPLATE } from "@/lib/invoice-template";
+
+const h = React.createElement;
 
 type InvoiceForPdf = {
   number: string;
@@ -14,9 +39,22 @@ type InvoiceForPdf = {
   total: unknown;
   paid: unknown;
   status: string;
-  customer: { name: string; address: string | null; city: string | null; country: string | null; taxId: string | null };
-  organization: { name: string };
-  lines: { description: string; quantity: unknown; unitPrice: unknown; total: unknown }[];
+  customer: {
+    name: string;
+    address: string | null;
+    city: string | null;
+    country: string | null;
+    taxId: string | null;
+  };
+  organization: { name: string; logoUrl?: string | null };
+  lines: {
+    description: string;
+    quantity: unknown;
+    unitPrice: unknown;
+    total: unknown;
+    taxRate?: unknown;
+    discount?: unknown;
+  }[];
   payments?: {
     paidAt: Date;
     amount: unknown;
@@ -25,23 +63,55 @@ type InvoiceForPdf = {
   }[];
 };
 
+const FALLBACK_LABELS: Record<LabelKey, string> = {
+  invoice: "INVOICE",
+  billTo: "Bill to",
+  qty: "Qty",
+  unitPrice: "Unit",
+  description: "Description",
+  taxRate: "Tax %",
+  discount: "Discount",
+  lineTotal: "Total",
+  subtotal: "Subtotal",
+  tax: "Tax",
+  total: "Total",
+  paid: "Paid",
+  balance: "Balance due",
+  notes: "Notes",
+  paymentTerms: "Payment terms",
+  bankDetails: "Bank details",
+  issueDate: "Issue date",
+  dueDate: "Due date",
+  invoiceNumber: "Invoice no.",
+};
+
 function buildStyles(tpl: InvoiceTemplate) {
   const blockMap = new Map(tpl.blocks.map((b) => [b.id, b]));
-  const header = blockMap.get("header") ?? DEFAULT_TEMPLATE.blocks[0];
-  const billTo = blockMap.get("billTo") ?? DEFAULT_TEMPLATE.blocks[1];
-  const details = blockMap.get("details") ?? DEFAULT_TEMPLATE.blocks[2];
-  const table = blockMap.get("table") ?? DEFAULT_TEMPLATE.blocks[3];
-  const totals = blockMap.get("totals") ?? DEFAULT_TEMPLATE.blocks[4];
-  const notes = blockMap.get("notes") ?? DEFAULT_TEMPLATE.blocks[5];
-  const footer = blockMap.get("footer") ?? DEFAULT_TEMPLATE.blocks[6];
+  const get = (id: BlockId) =>
+    blockMap.get(id) ??
+    DEFAULT_TEMPLATE.blocks.find((b) => b.id === id) ??
+    DEFAULT_TEMPLATE.blocks[0];
+  const header = get("header");
+  const billTo = get("billTo");
+  const details = get("details");
+  const table = get("table");
+  const totals = get("totals");
+  const payments = get("payments");
+  const notes = get("notes");
+  const paymentTerms = get("paymentTerms");
+  const bankDetails = get("bankDetails");
+  const footer = get("footer");
+
+  const fontWeight = (w: string) => (w === "bold" ? 700 : w === "medium" ? 500 : 400);
 
   return {
-    blocks: { header, billTo, details, table, totals, notes, footer },
+    blocks: { header, billTo, details, table, totals, payments, notes, paymentTerms, bankDetails, footer },
     styles: StyleSheet.create({
       page: {
         padding: 40,
         fontSize: 10,
-        fontFamily: tpl.fontFamily === "Times-Roman" ? "Times-Roman" : tpl.fontFamily,
+        fontFamily:
+          tpl.fontFamily === "Times-Roman" ? "Times-Roman" : tpl.fontFamily,
         color: "#111",
         backgroundColor: "#ffffff",
       },
@@ -55,9 +125,10 @@ function buildStyles(tpl: InvoiceTemplate) {
         fontSize: header.fontSize,
         color: header.color,
       },
+      logo: { width: 96, height: 48, objectFit: "contain" },
       h1: {
         fontSize: header.fontSize,
-        fontWeight: header.fontWeight === "bold" ? 700 : 400,
+        fontWeight: fontWeight(header.fontWeight),
         color: tpl.primaryColor,
       },
       muted: { color: "#666" },
@@ -76,7 +147,11 @@ function buildStyles(tpl: InvoiceTemplate) {
         color: details.color,
         backgroundColor: details.bgColor,
       },
-      row: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
+      row: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        marginBottom: 4,
+      },
       table: { marginTop: 12 },
       tableHead: {
         flexDirection: "row",
@@ -95,9 +170,7 @@ function buildStyles(tpl: InvoiceTemplate) {
         color: table.color,
       },
       cellDesc: { flex: 4 },
-      cellQty: { flex: 1, textAlign: "right" },
-      cellPrice: { flex: 1.5, textAlign: "right" },
-      cellTotal: { flex: 1.5, textAlign: "right" },
+      cellNum: { flex: 1.2, textAlign: "right" },
       totalsSection: {
         marginTop: 12,
         marginLeft: "auto",
@@ -120,12 +193,47 @@ function buildStyles(tpl: InvoiceTemplate) {
         fontSize: totals.fontSize + 2,
         backgroundColor: tpl.accentColor,
       },
+      paymentsSection: {
+        marginTop: 12,
+        fontSize: payments.fontSize,
+        color: payments.color,
+        backgroundColor: payments.bgColor,
+      },
       notesSection: {
         marginTop: 16,
         fontSize: notes.fontSize,
         color: notes.color,
         backgroundColor: notes.bgColor,
         textAlign: notes.align,
+        padding: 8,
+        borderRadius: 4,
+      },
+      paymentTermsSection: {
+        marginTop: 8,
+        fontSize: paymentTerms.fontSize,
+        color: paymentTerms.color,
+        backgroundColor: paymentTerms.bgColor,
+        textAlign: paymentTerms.align,
+        padding: 8,
+        borderRadius: 4,
+      },
+      bankDetailsSection: {
+        marginTop: 8,
+        fontSize: bankDetails.fontSize,
+        color: bankDetails.color,
+        backgroundColor: bankDetails.bgColor,
+        textAlign: bankDetails.align,
+        padding: 8,
+        borderRadius: 4,
+        border: "1pt solid #e5e7eb",
+      },
+      signature: {
+        marginTop: 32,
+        paddingTop: 6,
+        borderTop: "1pt solid #94a3b8",
+        width: 200,
+        fontSize: 9,
+        color: "#374151",
       },
       footerSection: {
         position: "absolute",
@@ -142,12 +250,12 @@ function buildStyles(tpl: InvoiceTemplate) {
   };
 }
 
-function f(n: unknown, cur = "USD") {
+function fmt(n: unknown, cur = "USD") {
   const num = Number(n ?? 0);
   return `${cur} ${num.toFixed(2)}`;
 }
 
-function d(date: Date) {
+function dateOnly(date: Date) {
   return new Date(date).toISOString().slice(0, 10);
 }
 
@@ -159,148 +267,292 @@ export function InvoicePDF({
   template?: InvoiceTemplate;
 }) {
   const tpl = template ?? DEFAULT_TEMPLATE;
-  const { blocks, styles } = buildStyles(tpl);
+  const { styles } = buildStyles(tpl);
+  const label = (k: LabelKey) => tpl.labels[k] || FALLBACK_LABELS[k];
 
-  // Build ordered visible block ids from template
-  const orderedBlocks = tpl.blocks.map((b) => b.id);
-  const visible = new Set(tpl.blocks.filter((b) => b.visible).map((b) => b.id));
-
+  const visible = new Set(
+    tpl.blocks.filter((b) => b.visible).map((b) => b.id),
+  );
   const pageSize = tpl.pageSize === "Letter" ? "LETTER" : "A4";
 
-  return (
-    <Document>
-      <Page size={pageSize} style={styles.page}>
-        {/* Header */}
-        {visible.has("header") && (
-          <View style={styles.headerSection}>
-            <View>
-              <Text style={styles.h1}>INVOICE</Text>
-              <Text style={styles.muted}>#{invoice.number}</Text>
-            </View>
-            <View style={styles.detailsSection}>
-              <Text style={{ fontWeight: 700 }}>{invoice.organization.name}</Text>
-              <Text style={styles.muted}>Issue date: {d(invoice.issueDate)}</Text>
-              <Text style={styles.muted}>Due date: {d(invoice.dueDate)}</Text>
-              <Text style={styles.muted}>Status: {invoice.status}</Text>
-            </View>
-          </View>
-        )}
+  // Renderers keyed by block id; iterated in template.blocks order.
+  const renderers: Partial<Record<BlockId, () => React.ReactNode>> = {
+    header: () => renderHeader(),
+    billTo: () => renderBillTo(),
+    table: () => renderTable(),
+    totals: () => renderTotals(),
+    payments: () => renderPayments(),
+    notes: () => renderNotes(),
+    paymentTerms: () => renderPaymentTerms(),
+    bankDetails: () => renderBankDetails(),
+    footer: () => renderFooter(),
+  };
 
-        {/* Bill to */}
-        {visible.has("billTo") && (
-          <View style={styles.billToCard}>
-            <Text style={{ fontWeight: 700, marginBottom: 4 }}>Bill to</Text>
-            <Text>{invoice.customer.name}</Text>
-            {invoice.customer.address && (
-              <Text style={styles.muted}>{invoice.customer.address}</Text>
-            )}
-            {(invoice.customer.city || invoice.customer.country) && (
-              <Text style={styles.muted}>
-                {[invoice.customer.city, invoice.customer.country]
-                  .filter(Boolean)
-                  .join(", ")}
-              </Text>
-            )}
-            {invoice.customer.taxId && (
-              <Text style={styles.muted}>Tax ID: {invoice.customer.taxId}</Text>
-            )}
-          </View>
-        )}
+  function renderLogo() {
+    if (!tpl.showLogo || !invoice.organization.logoUrl) return null;
+    return h(Image, { src: invoice.organization.logoUrl, style: styles.logo });
+  }
 
-        {/* Line items */}
-        {visible.has("table") && (
-          <View style={styles.table}>
-            <View style={styles.tableHead}>
-              <Text style={styles.cellDesc}>Description</Text>
-              <Text style={styles.cellQty}>Qty</Text>
-              <Text style={styles.cellPrice}>Unit</Text>
-              <Text style={styles.cellTotal}>Total</Text>
-            </View>
-            {invoice.lines.map((l, i) => (
-              <View key={i} style={styles.tableRow}>
-                <Text style={styles.cellDesc}>{l.description}</Text>
-                <Text style={styles.cellQty}>{Number(l.quantity)}</Text>
-                <Text style={styles.cellPrice}>{f(l.unitPrice, invoice.currency)}</Text>
-                <Text style={styles.cellTotal}>{f(l.total, invoice.currency)}</Text>
-              </View>
-            ))}
-          </View>
-        )}
+  function renderHeader() {
+    const left: React.ReactNode[] = [];
+    const right: React.ReactNode[] = [];
 
-        {/* Totals */}
-        {visible.has("totals") && (
-          <View style={styles.totalsSection}>
-            <View style={styles.row}>
-              <Text>Subtotal</Text>
-              <Text>{f(invoice.subtotal, invoice.currency)}</Text>
-            </View>
-            <View style={styles.row}>
-              <Text>Tax ({Number(invoice.taxRate)}%)</Text>
-              <Text>{f(invoice.taxAmount, invoice.currency)}</Text>
-            </View>
-            <View style={styles.grand}>
-              <Text>Total</Text>
-              <Text>{f(invoice.total, invoice.currency)}</Text>
-            </View>
-            {Number(invoice.paid) > 0 && (
-              <View style={styles.row}>
-                <Text>Paid</Text>
-                <Text>{f(invoice.paid, invoice.currency)}</Text>
-              </View>
-            )}
-            {Number(invoice.total) - Number(invoice.paid) > 0 && (
-              <View style={styles.row}>
-                <Text>Balance due</Text>
-                <Text>
-                  {f(
-                    Math.max(0, Number(invoice.total) - Number(invoice.paid)),
-                    invoice.currency,
-                  )}
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
+    if (tpl.logoPosition === "left") {
+      const logo = renderLogo();
+      if (logo) left.push(h(View, { key: "logo" }, logo));
+    } else {
+      const logo = renderLogo();
+      if (logo) right.push(h(View, { key: "logo" }, logo));
+    }
 
-        {/* Payments received */}
-        {invoice.payments && invoice.payments.length > 0 && (
-          <View style={styles.table}>
-            <View style={styles.tableHead}>
-              <Text style={styles.cellDesc}>Payments received</Text>
-              <Text style={styles.cellQty}>Date</Text>
-              <Text style={styles.cellPrice}>Method</Text>
-              <Text style={styles.cellTotal}>Amount</Text>
-            </View>
-            {invoice.payments.map((p, i) => (
-              <View key={i} style={styles.tableRow}>
-                <Text style={styles.cellDesc}>
-                  {p.reference ? `Ref ${p.reference}` : "—"}
-                </Text>
-                <Text style={styles.cellQty}>{d(p.paidAt)}</Text>
-                <Text style={styles.cellPrice}>{p.method}</Text>
-                <Text style={styles.cellTotal}>
-                  {f(p.amount, invoice.currency)}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
+    left.push(
+      h(View, { key: "title" }, [
+        h(Text, { key: "t", style: styles.h1 }, label("invoice")),
+        h(
+          Text,
+          { key: "no", style: styles.muted },
+          `${label("invoiceNumber")} ${invoice.number}`,
+        ),
+      ]),
+    );
 
-        {/* Notes */}
-        {visible.has("notes") && (
-          <View style={styles.notesSection}>
-            <Text style={{ fontWeight: 700, marginBottom: 4 }}>Notes</Text>
-            <Text>Payment terms: Net 30</Text>
-          </View>
-        )}
+    right.push(
+      h(View, { key: "details", style: styles.detailsSection }, [
+        h(
+          Text,
+          { key: "org", style: { fontWeight: 700 } },
+          invoice.organization.name,
+        ),
+        h(
+          Text,
+          { key: "issue", style: styles.muted },
+          `${label("issueDate")}: ${dateOnly(invoice.issueDate)}`,
+        ),
+        h(
+          Text,
+          { key: "due", style: styles.muted },
+          `${label("dueDate")}: ${dateOnly(invoice.dueDate)}`,
+        ),
+        h(Text, { key: "status", style: styles.muted }, `Status: ${invoice.status}`),
+      ]),
+    );
 
-        {/* Footer */}
-        {visible.has("footer") && (
-          <Text style={styles.footerSection}>
-            {tpl.footerText || "Generated by BSC Logistics"}
-          </Text>
-        )}
-      </Page>
-    </Document>
+    return h(View, { key: "header", style: styles.headerSection }, [
+      h(View, { key: "l" }, left),
+      h(View, { key: "r" }, right),
+    ]);
+  }
+
+  function renderBillTo() {
+    const items: React.ReactNode[] = [
+      h(
+        Text,
+        { key: "label", style: { fontWeight: 700, marginBottom: 4 } },
+        label("billTo"),
+      ),
+      h(Text, { key: "name" }, invoice.customer.name),
+    ];
+    if (invoice.customer.address) {
+      items.push(
+        h(Text, { key: "addr", style: styles.muted }, invoice.customer.address),
+      );
+    }
+    if (invoice.customer.city || invoice.customer.country) {
+      items.push(
+        h(
+          Text,
+          { key: "loc", style: styles.muted },
+          [invoice.customer.city, invoice.customer.country]
+            .filter(Boolean)
+            .join(", "),
+        ),
+      );
+    }
+    if (invoice.customer.taxId) {
+      items.push(
+        h(
+          Text,
+          { key: "tax", style: styles.muted },
+          `Tax ID: ${invoice.customer.taxId}`,
+        ),
+      );
+    }
+    return h(View, { key: "billto", style: styles.billToCard }, items);
+  }
+
+  function renderTable() {
+    const cols = tpl.lineColumns;
+    const headCells: React.ReactNode[] = [
+      h(Text, { key: "d", style: styles.cellDesc }, label("description")),
+    ];
+    if (cols.qty)
+      headCells.push(h(Text, { key: "q", style: styles.cellNum }, label("qty")));
+    if (cols.unitPrice)
+      headCells.push(h(Text, { key: "u", style: styles.cellNum }, label("unitPrice")));
+    if (cols.taxRate)
+      headCells.push(h(Text, { key: "tx", style: styles.cellNum }, label("taxRate")));
+    if (cols.discount)
+      headCells.push(h(Text, { key: "ds", style: styles.cellNum }, label("discount")));
+    if (cols.lineTotal)
+      headCells.push(h(Text, { key: "t", style: styles.cellNum }, label("lineTotal")));
+
+    const head = h(View, { key: "head", style: styles.tableHead }, headCells);
+
+    const rows = invoice.lines.map((l, i) => {
+      const cells: React.ReactNode[] = [
+        h(Text, { key: "d", style: styles.cellDesc }, l.description),
+      ];
+      if (cols.qty)
+        cells.push(
+          h(Text, { key: "q", style: styles.cellNum }, String(Number(l.quantity))),
+        );
+      if (cols.unitPrice)
+        cells.push(
+          h(Text, { key: "u", style: styles.cellNum }, fmt(l.unitPrice, invoice.currency)),
+        );
+      if (cols.taxRate)
+        cells.push(
+          h(Text, { key: "tx", style: styles.cellNum }, `${Number(l.taxRate ?? 0)}%`),
+        );
+      if (cols.discount)
+        cells.push(
+          h(Text, { key: "ds", style: styles.cellNum }, fmt(l.discount, invoice.currency)),
+        );
+      if (cols.lineTotal)
+        cells.push(
+          h(Text, { key: "t", style: styles.cellNum }, fmt(l.total, invoice.currency)),
+        );
+      return h(View, { key: `r${i}`, style: styles.tableRow }, cells);
+    });
+
+    return h(View, { key: "table", style: styles.table }, [head, ...rows]);
+  }
+
+  function renderTotals() {
+    const children: React.ReactNode[] = [
+      h(View, { key: "sub", style: styles.row }, [
+        h(Text, { key: "l" }, label("subtotal")),
+        h(Text, { key: "v" }, fmt(invoice.subtotal, invoice.currency)),
+      ]),
+      h(View, { key: "tax", style: styles.row }, [
+        h(Text, { key: "l" }, `${label("tax")} (${Number(invoice.taxRate)}%)`),
+        h(Text, { key: "v" }, fmt(invoice.taxAmount, invoice.currency)),
+      ]),
+      h(View, { key: "grand", style: styles.grand }, [
+        h(Text, { key: "l" }, label("total")),
+        h(Text, { key: "v" }, fmt(invoice.total, invoice.currency)),
+      ]),
+    ];
+    if (Number(invoice.paid) > 0) {
+      children.push(
+        h(View, { key: "paid", style: styles.row }, [
+          h(Text, { key: "l" }, label("paid")),
+          h(Text, { key: "v" }, fmt(invoice.paid, invoice.currency)),
+        ]),
+      );
+    }
+    if (Number(invoice.total) - Number(invoice.paid) > 0) {
+      children.push(
+        h(View, { key: "bal", style: styles.row }, [
+          h(Text, { key: "l" }, label("balance")),
+          h(
+            Text,
+            { key: "v" },
+            fmt(
+              Math.max(0, Number(invoice.total) - Number(invoice.paid)),
+              invoice.currency,
+            ),
+          ),
+        ]),
+      );
+    }
+    return h(View, { key: "totals", style: styles.totalsSection }, children);
+  }
+
+  function renderPayments() {
+    if (!invoice.payments || invoice.payments.length === 0) return null;
+    const head = h(View, { key: "head", style: styles.tableHead }, [
+      h(Text, { key: "d", style: styles.cellDesc }, "Payments received"),
+      h(Text, { key: "q", style: styles.cellNum }, label("issueDate")),
+      h(Text, { key: "m", style: styles.cellNum }, "Method"),
+      h(Text, { key: "a", style: styles.cellNum }, "Amount"),
+    ]);
+    const rows = invoice.payments.map((p, i) =>
+      h(View, { key: `p${i}`, style: styles.tableRow }, [
+        h(
+          Text,
+          { key: "d", style: styles.cellDesc },
+          p.reference ? `Ref ${p.reference}` : "—",
+        ),
+        h(Text, { key: "q", style: styles.cellNum }, dateOnly(p.paidAt)),
+        h(Text, { key: "m", style: styles.cellNum }, p.method),
+        h(Text, { key: "a", style: styles.cellNum }, fmt(p.amount, invoice.currency)),
+      ]),
+    );
+    return h(View, { key: "payments", style: styles.paymentsSection }, [head, ...rows]);
+  }
+
+  function renderNotes() {
+    if (!tpl.notes.trim()) return null;
+    return h(View, { key: "notes", style: styles.notesSection }, [
+      h(Text, { key: "l", style: { fontWeight: 700, marginBottom: 4 } }, label("notes")),
+      h(Text, { key: "v" }, tpl.notes),
+    ]);
+  }
+
+  function renderPaymentTerms() {
+    if (!tpl.paymentTerms.trim()) return null;
+    return h(View, { key: "pt", style: styles.paymentTermsSection }, [
+      h(
+        Text,
+        { key: "l", style: { fontWeight: 700, marginBottom: 4 } },
+        label("paymentTerms"),
+      ),
+      h(Text, { key: "v" }, tpl.paymentTerms),
+    ]);
+  }
+
+  function renderBankDetails() {
+    if (!tpl.bankDetails.trim()) return null;
+    return h(View, { key: "bd", style: styles.bankDetailsSection }, [
+      h(
+        Text,
+        { key: "l", style: { fontWeight: 700, marginBottom: 4 } },
+        label("bankDetails"),
+      ),
+      h(Text, { key: "v" }, tpl.bankDetails),
+    ]);
+  }
+
+  function renderFooter() {
+    return h(
+      Text,
+      { key: "footer", style: styles.footerSection },
+      tpl.footerText || "Generated by BSC Logistics",
+    );
+  }
+
+  // Iterate template.blocks in declared order so drag-reorder actually applies.
+  const sections: React.ReactNode[] = [];
+  for (const block of tpl.blocks) {
+    if (!visible.has(block.id)) continue;
+    const fn = renderers[block.id];
+    if (!fn) continue;
+    const node = fn();
+    if (node) sections.push(node);
+  }
+
+  if (tpl.signature.enabled) {
+    sections.push(
+      h(View, { key: "sig", style: styles.signature }, [
+        h(Text, { key: "v" }, tpl.signature.label || "Authorized signature"),
+      ]),
+    );
+  }
+
+  return h(
+    Document,
+    null,
+    h(Page, { size: pageSize, style: styles.page }, sections),
   );
 }

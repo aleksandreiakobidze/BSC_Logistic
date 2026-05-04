@@ -183,6 +183,7 @@ export type CustomerStatus = (typeof CustomerStatus)[keyof typeof CustomerStatus
 export const QuotationStatus = {
   DRAFT: "DRAFT",
   SENT: "SENT",
+  COUNTERED: "COUNTERED",
   ACCEPTED: "ACCEPTED",
   REJECTED: "REJECTED",
   EXPIRED: "EXPIRED",

@@ -10,6 +10,8 @@ import { EmptyState } from "@/components/app/empty-state";
 import { formatDateTime } from "@/lib/utils";
 import { ListFilters } from "@/components/app/list-filters";
 import { MovementKind } from "@/lib/enums";
+import { ItemDialog } from "./item-dialog";
+import { formatCurrency } from "@/lib/utils";
 
 const MOVEMENT_OPTIONS = Object.values(MovementKind).map((k) => ({ label: k, value: k }));
 
@@ -76,7 +78,7 @@ export default async function WarehousePage({
 
   return (
     <div className="space-y-6">
-      <PageHeader title={t("warehouse.title")} />
+      <PageHeader title={t("warehouse.title")} actions={<ItemDialog />} />
 
       <ListFilters
         searchPlaceholder="Search SKU or item name…"
@@ -123,7 +125,9 @@ export default async function WarehousePage({
                     <TableRow>
                       <TableHead>{t("warehouse.sku")}</TableHead>
                       <TableHead>{t("common.name")}</TableHead>
+                      <TableHead className="text-right">Price</TableHead>
                       <TableHead className="text-right">Stock</TableHead>
+                      <TableHead />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -131,7 +135,31 @@ export default async function WarehousePage({
                       <TableRow key={i.id}>
                         <TableCell className="font-mono text-xs">{i.sku}</TableCell>
                         <TableCell>{i.name}</TableCell>
+                        <TableCell className="text-right font-mono text-sm">
+                          {formatCurrency(Number(i.unitPrice), i.currency, locale)}
+                        </TableCell>
                         <TableCell className="text-right font-mono">{i.stock} {i.unit}</TableCell>
+                        <TableCell className="text-right">
+                          <ItemDialog
+                            value={{
+                              id: i.id,
+                              sku: i.sku,
+                              name: i.name,
+                              description: i.description,
+                              unit: i.unit,
+                              unitPrice: Number(i.unitPrice),
+                              currency: i.currency,
+                              taxRate: Number(i.taxRate),
+                              weightKg: i.weightKg ?? "",
+                              notes: i.notes,
+                            }}
+                            trigger={
+                              <button className="text-xs text-primary hover:underline">
+                                Edit
+                              </button>
+                            }
+                          />
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

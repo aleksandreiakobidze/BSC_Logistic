@@ -17,7 +17,12 @@ export default async function InvoiceDesignerPage({
 
   const org = await prisma.organization.findUnique({
     where: { id: orgId },
-    select: { invoiceTemplate: true, name: true },
+    select: {
+      invoiceTemplate: true,
+      name: true,
+      logoUrl: true,
+      baseCurrency: true,
+    },
   });
 
   const template = parseTemplate(org?.invoiceTemplate);
@@ -28,7 +33,12 @@ export default async function InvoiceDesignerPage({
         title={t("invoiceDesigner.title")}
         description={t("invoiceDesigner.description")}
       />
-      <InvoiceDesigner initialTemplate={template} orgName={org?.name ?? ""} />
+      <InvoiceDesigner
+        initialTemplate={template}
+        orgName={org?.name ?? ""}
+        initialLogoUrl={org?.logoUrl ?? null}
+        baseCurrency={org?.baseCurrency ?? "USD"}
+      />
     </div>
   );
 }

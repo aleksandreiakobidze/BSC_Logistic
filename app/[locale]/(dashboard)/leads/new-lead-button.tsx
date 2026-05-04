@@ -118,7 +118,7 @@ export function NewLeadButton({
           <Plus className="h-4 w-4" /> {t("leads.newLead")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl" withDescription>
         <DialogHeader>
           <DialogTitle>{t("leads.newLead")}</DialogTitle>
           <DialogDescription>{t("leads.newLeadDescription")}</DialogDescription>

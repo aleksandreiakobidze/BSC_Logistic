@@ -57,6 +57,14 @@ export type CustomFieldDefinitionInput = {
   validation?: CustomFieldValidation;
   sortOrder?: number;
   isActive?: boolean;
+  /** Group bucket key (matches `CustomFieldGroup.key`); null = "Other". */
+  groupKey?: string | null;
+  /** Width in 12-column grid (3, 4, 6, 12). */
+  width?: number;
+  /** Default suggestion for the entity-list column picker. */
+  showInList?: boolean;
+  /** Render TEXT as a textarea instead of a single-line input. */
+  multiline?: boolean;
 };
 
 export type CustomFieldDefinitionView = CustomFieldDefinitionInput & {
@@ -64,6 +72,18 @@ export type CustomFieldDefinitionView = CustomFieldDefinitionInput & {
   required: boolean;
   sortOrder: number;
   isActive: boolean;
+  groupKey: string | null;
+  width: number;
+  showInList: boolean;
+  multiline: boolean;
+};
+
+export type CustomFieldGroupView = {
+  id: string;
+  entityType: CustomFieldEntity;
+  key: string;
+  label: string;
+  sortOrder: number;
 };
 
 export type CustomFieldValueMap = Record<string, unknown>;

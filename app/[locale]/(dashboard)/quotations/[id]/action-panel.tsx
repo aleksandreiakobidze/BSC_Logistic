@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useTranslations } from "next-intl";
+import { useTranslations, useLocale } from "next-intl";
 import { useRouter } from "next/navigation";
 import {
   Send,
@@ -16,11 +16,12 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  sendQuotation,
+  sendQuotationEmail,
   acceptQuotation,
   rejectQuotation,
   cancelQuotation,
   convertQuotationToOrder,
+  sendAdminCounter,
 } from "../actions";
 import { QuotationStatus } from "@/lib/enums";
 
@@ -41,6 +42,7 @@ export function QuotationActionPanel({
   convertedOrderId?: string | null;
 }) {
   const t = useTranslations();
+  const locale = useLocale();
   const router = useRouter();
   const [busyAction, setBusyAction] = React.useState<string | null>(null);
 
@@ -77,8 +79,28 @@ export function QuotationActionPanel({
             onClick={() =>
               run(
                 "send",
-                () => sendQuotation(quotationId),
+                () => sendQuotationEmail({ quotationId, locale }),
                 t("quotations.sentSuccess"),
+              )
+            }
+          />
+        )}
+        {status === QuotationStatus.COUNTERED && (
+          <ActionButton
+            icon={Send}
+            label={
+              t.has("quotations.portal.sendCounter")
+                ? t("quotations.portal.sendCounter")
+                : "Send counter"
+            }
+            busy={busyAction === "counter"}
+            onClick={() =>
+              run(
+                "counter",
+                () => sendAdminCounter({ quotationId, locale }),
+                t.has("quotations.portal.counterSentToast")
+                  ? t("quotations.portal.counterSentToast")
+                  : "Counter sent",
               )
             }
           />

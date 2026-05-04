@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/app/empty-state";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { NewOrderButton } from "./new-order-button";
 import { ExportButton } from "@/components/app/export-button";
+import { ImportButton } from "@/components/app/import-button";
 import { CustomFieldEntity } from "@/lib/custom-fields";
 import { getCustomFieldDefinitions } from "../settings/custom-fields/actions";
 import { ListFilters } from "@/components/app/list-filters";
@@ -60,6 +61,7 @@ export default async function OrdersPage({
         title={t("orders.title")}
         actions={
           <>
+            <ImportButton entity="orders" />
             <ExportButton entity="orders" />
             <NewOrderButton customers={customers} customFields={customFields} />
           </>

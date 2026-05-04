@@ -51,6 +51,8 @@ model Organization {
   quotations Quotation[]
   customFieldDefinitions CustomFieldDefinition[]
   customFieldValues      CustomFieldValue[]
+  customFieldGroups      CustomFieldGroup[]
+  importFieldConfigs     ImportFieldConfig[]
 }
 
 model CustomFieldDefinition {
@@ -68,6 +70,15 @@ model CustomFieldDefinition {
   validationJson String?
   sortOrder      Int      @default(0)
   isActive       Boolean  @default(true)
+  /// Free-form group bucket key. Pairs with `CustomFieldGroup` for label/order.
+  /// Null falls into the implicit "Other" group at render time.
+  groupKey       String?
+  /// Width in 12-column responsive grid (1..12). 12 = full row.
+  width          Int      @default(12)
+  /// Default suggestion for the entity-list column picker.
+  showInList     Boolean  @default(false)
+  /// Render TEXT as a Textarea instead of a single-line Input.
+  multiline      Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -76,6 +87,25 @@ model CustomFieldDefinition {
 
   @@unique([orgId, entityType, key])
   @@index([orgId, entityType, isActive])
+}
+
+/// User-defined grouping bucket for custom fields. Used by the builder to
+/// label and order the collapsible cards rendered by `CustomFieldsForm` and
+/// `CustomFieldsDisplay`. Definitions reference a group by its `key`.
+model CustomFieldGroup {
+  id         String   @id @default(cuid())
+  orgId      String
+  entityType String
+  key        String
+  label      String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, entityType, key])
+  @@index([orgId, entityType])
 }
 
 model CustomFieldValue {
@@ -93,6 +123,26 @@ model CustomFieldValue {
 
   @@unique([definitionId, recordId])
   @@index([orgId, entityType, recordId])
+}
+
+/// Per-org override of which fields are required when importing from
+/// .xlsx/.csv. `fieldKey` matches a built-in registry key (e.g. "name") or
+/// a custom field definition key prefixed with "cf_". When no row exists for
+/// a given (entityType, fieldKey), the importer falls back to the field's
+/// default required state.
+model ImportFieldConfig {
+  id         String   @id @default(cuid())
+  orgId      String
+  entityType String
+  fieldKey   String
+  required   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, entityType, fieldKey])
+  @@index([orgId, entityType])
 }
 
 model Branch {
@@ -142,6 +192,8 @@ model User {
   assignedLeadTasks LeadTask[]   @relation("AssignedLeadTasks")
   createdPayments Payment[]      @relation("CreatedPayments")
   ownedQuotations Quotation[]    @relation("OwnedQuotations")
+  authoredQuotationRevisions QuotationRevision[] @relation("AuthoredQuotationRevisions")
+  authoredQuotationMessages  QuotationMessage[]  @relation("AuthoredQuotationMessages")
 
   @@index([orgId])
   @@index([role])
@@ -585,19 +637,26 @@ model Bin {
 }
 
 model StockItem {
-  id        String   @id @default(cuid())
-  orgId     String
-  sku       String
-  name      String
-  unit      String   @default("pcs")
-  weightKg  Float?
-  notes     String?
-  createdAt DateTime @default(now())
+  id          String   @id @default(cuid())
+  orgId       String
+  sku         String
+  name        String
+  description String?
+  unit        String   @default("pcs")
+  unitPrice   Decimal  @default(0)
+  currency    String   @default("USD")
+  taxRate     Decimal  @default(0)
+  weightKg    Float?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt @default(now())
 
-  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  movements    StockMovement[]
+  organization   Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  movements      StockMovement[]
+  quotationLines QuotationLine[]
 
   @@unique([orgId, sku])
+  @@index([orgId])
 }
 
 model StockMovement {
@@ -874,13 +933,15 @@ model Quotation {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  organization     Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  customer         Customer        @relation(fields: [customerId], references: [id])
-  contact          Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  lead             Lead?           @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  owner            User?           @relation("OwnedQuotations", fields: [ownerId], references: [id], onDelete: SetNull)
+  organization     Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer         Customer            @relation(fields: [customerId], references: [id])
+  contact          Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  lead             Lead?               @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  owner            User?               @relation("OwnedQuotations", fields: [ownerId], references: [id], onDelete: SetNull)
   lines            QuotationLine[]
-  convertedOrders  Order[]         @relation("QuotationConvertedOrders")
+  revisions        QuotationRevision[]
+  messages         QuotationMessage[]
+  convertedOrders  Order[]             @relation("QuotationConvertedOrders")
 
   @@unique([orgId, number])
   @@index([orgId, status])
@@ -892,15 +953,80 @@ model Quotation {
 model QuotationLine {
   id          String  @id @default(cuid())
   quotationId String
+  itemId      String?
   description String
   quantity    Decimal @default(1)
   unitPrice   Decimal @default(0)
   total       Decimal @default(0)
   sortOrder   Int     @default(0)
 
-  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  /// Customer's most-recent response on this line, if any.
+  /// `ACCEPTED` = customer kept admin's values as-is.
+  /// `MODIFIED` = customer counter-proposed (see proposed* fields).
+  customerStatus      String?
+  customerNote        String?
+  proposedQuantity    Decimal?
+  proposedUnitPrice   Decimal?
+  proposedDescription String?
+
+  quotation Quotation  @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  item      StockItem? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  messages  QuotationMessage[]
 
   @@index([quotationId])
+  @@index([itemId])
+}
+
+/// Immutable per-round snapshot of a quotation. Captures both the admin's
+/// outgoing offers and the customer's incoming responses so the negotiation
+/// history is fully reconstructable.
+model QuotationRevision {
+  id           String   @id @default(cuid())
+  quotationId  String
+  version      Int
+  source       String   // ADMIN | CUSTOMER
+  authorUserId String?
+  message      String?
+  currency     String
+  subtotal     Decimal
+  taxRate      Decimal
+  taxAmount    Decimal
+  discount     Decimal
+  total        Decimal
+  /// JSON snapshot of all lines at this revision. Each entry contains:
+  /// { description, quantity, unitPrice, total, sortOrder, itemId, customerStatus,
+  ///   customerNote, proposedQuantity, proposedUnitPrice, proposedDescription }
+  linesJson    String
+  createdAt    DateTime @default(now())
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  author    User?     @relation("AuthoredQuotationRevisions", fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@unique([quotationId, version])
+  @@index([quotationId])
+}
+
+/// Free-form chat between the customer (CUSTOMER role) and admin staff on
+/// a quotation. When `lineId` is set, the message is scoped to that
+/// `QuotationLine` (per-line comment thread). When `lineId` is null, it's a
+/// whole-quote conversation. Persists across negotiation rounds.
+model QuotationMessage {
+  id             String   @id @default(cuid())
+  quotationId    String
+  lineId         String?
+  authorUserId   String?
+  authorRole     String   // ADMIN | CUSTOMER | SYSTEM
+  body           String
+  createdAt      DateTime @default(now())
+  readByCustomer Boolean  @default(false)
+  readByAdmin    Boolean  @default(false)
+
+  quotation Quotation      @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  line      QuotationLine? @relation(fields: [lineId], references: [id], onDelete: SetNull)
+  author    User?          @relation("AuthoredQuotationMessages", fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([quotationId, createdAt])
+  @@index([lineId])
 }
 
 // ============================================================================

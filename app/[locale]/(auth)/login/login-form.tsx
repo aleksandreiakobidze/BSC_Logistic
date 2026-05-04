@@ -2,17 +2,20 @@
 
 import * as React from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { signIn } from "next-auth/react";
+import { signIn, getSession } from "next-auth/react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { roleHomePath } from "@/lib/rbac";
+import type { Role } from "@/lib/enums";
 
 export function LoginForm() {
   const t = useTranslations();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [loading, setLoading] = React.useState(false);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -29,7 +32,19 @@ export function LoginForm() {
       toast.error(t("auth.invalidCredentials"));
       return;
     }
-    router.push("/overview");
+
+    // The middleware that bounced the user here added `?callbackUrl=...` so
+    // we can return them to the deep link they originally requested
+    // (e.g. a quotation portal page from an emailed link). If no callback
+    // is set, fall back to the role-aware home path so customers land on
+    // /portal, drivers on /driver, etc.
+    const callbackUrl = searchParams.get("callbackUrl");
+    if (callbackUrl && callbackUrl.startsWith("/")) {
+      router.push(callbackUrl);
+    } else {
+      const session = await getSession();
+      router.push(roleHomePath(session?.user?.role as Role | undefined));
+    }
     router.refresh();
   }
 

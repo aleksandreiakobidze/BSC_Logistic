@@ -9,6 +9,10 @@ const nextConfig = {
   poweredByHeader: false,
   compress: true,
   productionBrowserSourceMaps: false,
+  // Keep `@react-pdf/renderer` external so its reconciler is not mixed with
+  // Next’s bundled server React (avoids production "React error #31"). Traced
+  // into `.next/standalone/node_modules` by the standalone output.
+  serverExternalPackages: ["@react-pdf/renderer"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**" },

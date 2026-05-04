@@ -234,7 +234,7 @@ export function QualificationWizard({ lead }: { lead: LeadSeed }) {
         <UserCheck className="mr-2 h-4 w-4" />
         {t("leads.convertToCustomer")}
       </Button>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-xl" withDescription>
         <DialogHeader>
           <DialogTitle>{t("leads.qualifyTitle")}</DialogTitle>
           <DialogDescription>

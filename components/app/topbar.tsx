@@ -3,11 +3,9 @@
 import * as React from "react";
 import { signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Search, LogOut, User } from "lucide-react";
+import { Search, LogOut, User, Bell, ChevronRight } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,8 +23,12 @@ import type { Role } from "@/lib/enums";
 
 export function Topbar({
   user,
+  hasNotifications,
+  breadcrumb,
 }: {
   user: { name?: string | null; email?: string | null; role?: Role };
+  hasNotifications?: boolean;
+  breadcrumb?: { label: string; current?: string };
 }) {
   const t = useTranslations();
   const router = useRouter();
@@ -44,21 +46,35 @@ export function Topbar({
   }, []);
 
   return (
-    <header className="sticky top-0 z-20 glass border-b">
-      <div className="flex h-16 items-center gap-3 px-4 lg:px-6">
+    <header className="sticky top-0 z-20 h-14 border-b border-app surface">
+      <div className="flex h-full items-center gap-3 px-4 lg:px-5">
         <MobileMenuButton role={user.role} />
 
-        <button
-          type="button"
-          onClick={() => setPaletteOpen(true)}
-          className="relative hidden w-full max-w-md items-center gap-2 rounded-xl border bg-background/60 px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent md:flex"
-        >
-          <Search className="h-4 w-4" />
-          <span>{t("common.search")}</span>
-          <kbd className="pointer-events-none ml-auto inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium">
-            <span className="text-xs">⌘</span>K
-          </kbd>
-        </button>
+        {breadcrumb && (
+          <div className="hidden items-center gap-1.5 text-[12px] md:flex">
+            <span className="text-dim">{breadcrumb.label}</span>
+            {breadcrumb.current && (
+              <>
+                <ChevronRight className="h-3 w-3 text-dim" />
+                <span className="text-app">{breadcrumb.current}</span>
+              </>
+            )}
+          </div>
+        )}
+
+        <div className="mx-auto hidden w-full max-w-md md:block">
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            className="surface-2 flex w-full items-center gap-2 rounded-lg border border-app px-3 py-1.5 text-[12.5px] text-soft transition-colors hover:bg-[hsl(var(--surface-2))]"
+          >
+            <Search className="h-3.5 w-3.5" />
+            <span className="truncate">{t("common.search")}</span>
+            <kbd className="ml-auto rounded border border-soft px-1.5 py-0.5 font-mono text-[10px]">
+              ⌘K
+            </kbd>
+          </button>
+        </div>
 
         <Button
           variant="ghost"
@@ -71,14 +87,35 @@ export function Topbar({
         </Button>
 
         <div className="ml-auto flex items-center gap-1">
+          <button
+            type="button"
+            className="btn btn-ghost relative h-9 w-9 justify-center !p-0"
+            aria-label="Notifications"
+          >
+            <Bell className="h-[15px] w-[15px]" />
+            {hasNotifications && (
+              <span
+                className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full"
+                style={{ background: "hsl(var(--danger))" }}
+              />
+            )}
+          </button>
           <LocaleSwitcher />
           <ThemeToggle />
+          <div
+            className="mx-1 h-6 w-px"
+            style={{ background: "hsl(var(--border))" }}
+          />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="ml-1 rounded-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring">
-                <Avatar className="h-9 w-9">
-                  <AvatarFallback>{initials(user.name)}</AvatarFallback>
-                </Avatar>
+              <button
+                className="grid h-8 w-8 place-items-center rounded-full text-[11px] font-semibold outline-none transition focus-visible:ring-2 focus-visible:ring-ring"
+                style={{
+                  background: "hsl(var(--primary) / 0.12)",
+                  color: "hsl(var(--primary))",
+                }}
+              >
+                {initials(user.name) || "?"}
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">

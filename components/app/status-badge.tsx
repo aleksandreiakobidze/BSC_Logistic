@@ -54,6 +54,7 @@ const driver: Record<DriverStatus, Variant> = {
 const quotation: Record<QuotationStatus, Variant> = {
   DRAFT: "muted",
   SENT: "default",
+  COUNTERED: "warning",
   ACCEPTED: "success",
   REJECTED: "destructive",
   EXPIRED: "warning",

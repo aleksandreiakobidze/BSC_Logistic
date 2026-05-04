@@ -29,13 +29,16 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/app/status-badge";
 import { NewContactButton } from "@/app/[locale]/(dashboard)/contacts/new-contact-button";
+import { EditCustomerButton } from "../new-customer-button";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { CustomFieldsDisplay } from "@/components/app/custom-fields/custom-fields-display";
 import { CustomFieldEntity } from "@/lib/custom-fields";
+import { Role } from "@/lib/enums";
 import {
   getCustomFieldDefinitions,
   getCustomFieldValues,
 } from "../../settings/custom-fields/actions";
+import { PortalAccessCard } from "./portal-access-card";
 
 export default async function CustomerDetailPage({
   params,
@@ -47,7 +50,7 @@ export default async function CustomerDetailPage({
   const t = await getTranslations();
   const { orgId } = await requireOrg();
 
-  const [customer, customerCustomFields, customerCustomFieldValues, contactCustomFields] =
+  const [customer, customerCustomFields, customerCustomFieldValues, contactCustomFields, portalUser] =
     await Promise.all([
       prisma.customer.findFirst({
         where: { id, orgId },
@@ -85,6 +88,10 @@ export default async function CustomerDetailPage({
       getCustomFieldDefinitions(orgId, CustomFieldEntity.CUSTOMER),
       getCustomFieldValues(orgId, CustomFieldEntity.CUSTOMER, id),
       getCustomFieldDefinitions(orgId, CustomFieldEntity.CONTACT),
+      prisma.user.findFirst({
+        where: { customerId: id, role: Role.CUSTOMER, orgId },
+        select: { id: true, email: true, lastLoginAt: true },
+      }),
     ]);
 
   if (!customer) notFound();
@@ -107,6 +114,27 @@ export default async function CustomerDetailPage({
           </span>
         }
         description={customer.code ? `#${customer.code}` : undefined}
+        actions={
+          <EditCustomerButton
+            value={{
+              id: customer.id,
+              name: customer.name,
+              code: customer.code,
+              email: customer.email,
+              phone: customer.phone,
+              taxId: customer.taxId,
+              address: customer.address,
+              city: customer.city,
+              country: customer.country,
+              creditLimit: customer.creditLimit
+                ? Number(customer.creditLimit)
+                : 0,
+              notes: customer.notes,
+            }}
+            customFields={customerCustomFields}
+            values={customerCustomFieldValues}
+          />
+        }
       />
 
       {/* Stats row */}
@@ -217,6 +245,15 @@ export default async function CustomerDetailPage({
               )}
             </CardContent>
           </Card>
+
+          <div className="mt-4">
+            <PortalAccessCard
+              customerId={customer.id}
+              customerName={customer.name}
+              defaultEmail={customer.email}
+              portalUser={portalUser}
+            />
+          </div>
         </div>
 
         {/* Main tabs */}

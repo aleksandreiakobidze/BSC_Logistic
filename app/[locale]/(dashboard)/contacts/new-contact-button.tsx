@@ -72,7 +72,7 @@ export function NewContactButton({
           <Plus className="h-4 w-4" /> {t("contacts.newContact")}
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" withDescription>
         <DialogHeader>
           <DialogTitle>{t("contacts.newContact")}</DialogTitle>
           <DialogDescription>{t("contacts.newContactDescription")}</DialogDescription>

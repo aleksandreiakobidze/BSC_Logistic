@@ -62,6 +62,58 @@ export async function createCustomer(formData: FormData) {
 }
 
 /**
+ * Update a customer's editable fields. Mirrors `createCustomer`'s schema so
+ * the same dialog can be reused for create/edit. Status is intentionally
+ * NOT updated here — use `setCustomerStatus` for that (it has the activation
+ * timestamp logic).
+ */
+export async function updateCustomer(id: string, formData: FormData) {
+  const { session, orgId } = await requireRole(staffRoles);
+  const existing = await prisma.customer.findFirstOrThrow({
+    where: { id, orgId },
+    select: { id: true },
+  });
+
+  const raw = Object.fromEntries(formData.entries());
+  const data = customerSchema.parse(raw);
+
+  await prisma.customer.update({
+    where: { id: existing.id },
+    data: {
+      name: data.name,
+      code: data.code || null,
+      email: data.email || null,
+      phone: data.phone || null,
+      taxId: data.taxId || null,
+      address: data.address || null,
+      city: data.city || null,
+      country: data.country || null,
+      creditLimit: data.creditLimit,
+      notes: data.notes || null,
+    },
+  });
+
+  await saveCustomFieldValues({
+    orgId,
+    entityType: CustomFieldEntity.CUSTOMER,
+    recordId: existing.id,
+    formData,
+  });
+
+  await audit({
+    action: "customer.update",
+    entity: "Customer",
+    entityId: existing.id,
+    orgId,
+    userId: session.user.id,
+  });
+
+  revalidatePath("/customers");
+  revalidatePath(`/customers/${existing.id}`);
+  return { ok: true, id: existing.id };
+}
+
+/**
  * Manual override of a customer's lifecycle status. The system also flips
  * `PROSPECT → ACTIVE` automatically when the first Sales Order is confirmed
  * (see [orders/actions.ts](app/[locale]/(dashboard)/orders/actions.ts)).

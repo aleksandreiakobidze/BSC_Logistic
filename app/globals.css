@@ -2,99 +2,396 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================================
+ * BSC Logistics — 2026 design tokens
+ *  · Light  ─ Warm Paper  (warm paper-white canvas, brighter cards on top)
+ *  · Dark   ─ Cool Night  (deep cool blue-black, OLED-friendly tonal layers)
+ *
+ *  All tokens are HSL tuples so Tailwind's `bg-primary/10` modifier and our
+ *  custom `hsl(var(--token))` utility classes share the same source of truth.
+ * ============================================================================
+ */
+
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
+    /* ── canvas / surfaces ── */
+    --background: 60 22% 97%;       /* warm paper canvas */
+    --foreground: 250 14% 19%;      /* near-black with cool blue cast */
+    --surface: 60 14% 99%;          /* card surface — slightly brighter */
+    --surface-2: 60 8% 95%;         /* recessed surface */
+    --elevated: 0 0% 100%;
+    --card: 60 14% 99%;
+    --card-foreground: 250 14% 19%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222 47% 11%;
-    --primary: 221 83% 53%;
+    --popover-foreground: 250 14% 19%;
+
+    /* ── text scale ── */
+    --text-dim: 250 6% 60%;
+    --text-muted: 250 6% 48%;
+    --muted: 60 8% 95%;
+    --muted-foreground: 250 6% 48%;
+
+    /* ── semantic colors ── */
+    --primary: 250 70% 56%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 0 72% 51%;
+    --secondary: 60 8% 95%;
+    --secondary-foreground: 250 14% 19%;
+    --accent: 60 8% 95%;
+    --accent-foreground: 250 14% 19%;
+    --destructive: 14 76% 50%;
     --destructive-foreground: 0 0% 100%;
-    --success: 142 71% 45%;
+    --danger: 14 76% 50%;
+    --danger-foreground: 0 0% 100%;
+    --success: 158 52% 38%;
     --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
+    --warning: 35 84% 50%;
     --warning-foreground: 0 0% 100%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 221 83% 53%;
-    --radius: 0.75rem;
+
+    /* ── borders / inputs / focus ── */
+    --border: 60 12% 86%;
+    --border-soft: 60 10% 90%;
+    --input: 60 12% 86%;
+    --ring: 250 70% 56%;
+
+    /* ── radius ── */
+    --radius: 1rem;
   }
 
   .dark {
-    --background: 222 47% 7%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222 47% 9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 7%;
-    --secondary: 217 33% 17%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 63% 50%;
-    --destructive-foreground: 210 40% 98%;
-    --success: 142 71% 45%;
-    --success-foreground: 0 0% 100%;
-    --warning: 38 92% 50%;
-    --warning-foreground: 0 0% 100%;
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 217 91% 60%;
+    --background: 234 26% 10%;
+    --foreground: 230 14% 96%;
+    --surface: 234 22% 14%;
+    --surface-2: 234 18% 18%;
+    --elevated: 234 18% 22%;
+    --card: 234 22% 14%;
+    --card-foreground: 230 14% 96%;
+    --popover: 234 22% 14%;
+    --popover-foreground: 230 14% 96%;
+
+    --text-dim: 232 10% 60%;
+    --text-muted: 232 12% 72%;
+    --muted: 234 18% 18%;
+    --muted-foreground: 232 12% 72%;
+
+    --primary: 248 88% 76%;
+    --primary-foreground: 234 26% 10%;
+    --secondary: 234 18% 18%;
+    --secondary-foreground: 230 14% 96%;
+    --accent: 234 18% 18%;
+    --accent-foreground: 230 14% 96%;
+    --destructive: 14 78% 62%;
+    --destructive-foreground: 230 14% 96%;
+    --danger: 14 78% 62%;
+    --danger-foreground: 230 14% 96%;
+    --success: 158 60% 60%;
+    --success-foreground: 234 26% 10%;
+    --warning: 38 86% 66%;
+    --warning-foreground: 234 26% 10%;
+
+    --border: 234 16% 26%;
+    --border-soft: 234 16% 22%;
+    --input: 234 16% 26%;
+    --ring: 248 88% 76%;
   }
+
+  .dark { color-scheme: dark; }
+  html:not(.dark) { color-scheme: light; }
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground antialiased;
-    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
-  }
-  html,
-  body {
+  * { @apply border-border; }
+  html, body {
     height: 100%;
+    background: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+  body {
+    @apply font-sans antialiased;
+    font-feature-settings: "ss01" 1, "cv11" 1, "cv02" 1, "tnum" 1, "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    letter-spacing: -0.005em;
+  }
+}
+
+/* ============================================================================
+ * Design system primitives — used directly in pages, no Tailwind translation
+ * ============================================================================
+ */
+@layer components {
+  /* ── surface helpers ──────────────────────────────────────────────────── */
+  .surface { background: hsl(var(--surface)); }
+  .surface-2 { background: hsl(var(--surface-2)); }
+  .elevated { background: hsl(var(--elevated)); }
+  .text-app { color: hsl(var(--foreground)); }
+  .text-soft { color: hsl(var(--text-muted)); }
+  .text-dim { color: hsl(var(--text-dim)); }
+  .border-app { border-color: hsl(var(--border)); }
+  .border-soft { border-color: hsl(var(--border-soft)); }
+  .ring-app { box-shadow: inset 0 0 0 1px hsl(var(--border)); }
+  .divider { height: 1px; background: hsl(var(--border-soft)); }
+
+  /* ── card: tonal layering, soft inset highlight in light mode ─────────── */
+  .card {
+    background: hsl(var(--surface));
+    border: 1px solid hsl(var(--border));
+    border-radius: 16px;
+    color: hsl(var(--foreground));
+  }
+  html:not(.dark) .card {
+    box-shadow:
+      0 1px 0 0 hsl(0 0% 100% / 0.6) inset,
+      0 1px 2px -1px hsl(250 14% 30% / 0.06),
+      0 4px 16px -8px hsl(250 14% 30% / 0.08);
+  }
+  .dark .card {
+    box-shadow:
+      0 1px 0 0 hsl(0 0% 100% / 0.04) inset,
+      0 1px 2px hsl(0 0% 0% / 0.4);
+  }
+
+  /* ── button (compact, tactile) ────────────────────────────────────────── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 10px;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--surface));
+    color: hsl(var(--foreground));
+    transition: background-color 0.15s ease, border-color 0.15s ease, filter 0.15s ease;
+    white-space: nowrap;
+  }
+  .btn:hover { background: hsl(var(--surface-2)); }
+  .btn:focus-visible { outline: 2px solid hsl(var(--primary)); outline-offset: 2px; }
+  .btn-primary {
+    background: hsl(var(--primary));
+    color: hsl(var(--primary-foreground));
+    border-color: transparent;
+  }
+  .btn-primary:hover { background: hsl(var(--primary)); filter: brightness(1.08); }
+  .btn-ghost { border-color: transparent; background: transparent; }
+  .btn-ghost:hover { background: hsl(var(--surface-2)); }
+  .btn-danger {
+    background: hsl(var(--danger));
+    color: hsl(var(--danger-foreground));
+    border-color: transparent;
+  }
+  .btn-danger:hover { filter: brightness(1.08); }
+
+  /* ── pill / status chip ───────────────────────────────────────────────── */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid hsl(var(--border-soft));
+    color: hsl(var(--foreground));
+    background: transparent;
+  }
+  .pill-primary { background: hsl(var(--primary) / 0.12); color: hsl(var(--primary)); border-color: transparent; }
+  .pill-success { background: hsl(var(--success) / 0.12); color: hsl(var(--success)); border-color: transparent; }
+  .pill-warning { background: hsl(var(--warning) / 0.14); color: hsl(var(--warning)); border-color: transparent; }
+  .pill-danger { background: hsl(var(--danger) / 0.12); color: hsl(var(--danger)); border-color: transparent; }
+
+  /* ── sidebar nav-item ─────────────────────────────────────────────────── */
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: hsl(var(--text-muted));
+    transition: background-color 0.12s ease, color 0.12s ease;
+  }
+  .nav-item:hover { background: hsl(var(--surface-2)); color: hsl(var(--foreground)); }
+  .nav-item.active {
+    background: hsl(var(--primary) / 0.1);
+    color: hsl(var(--primary));
+    font-weight: 500;
+  }
+  .nav-group-label {
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--text-dim));
+    padding: 0 10px;
+    margin: 14px 0 6px;
+    font-weight: 500;
+  }
+
+  /* ── input ────────────────────────────────────────────────────────────── */
+  .input {
+    width: 100%;
+    background: hsl(var(--surface-2));
+    border: 1px solid hsl(var(--border-soft));
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: hsl(var(--foreground));
+    outline: none;
+    transition: border-color 0.12s ease, box-shadow 0.12s ease, background-color 0.12s ease;
+  }
+  .input::placeholder { color: hsl(var(--text-dim)); }
+  .input:focus {
+    border-color: hsl(var(--primary));
+    box-shadow: 0 0 0 3px hsl(var(--primary) / 0.16);
+    background: hsl(var(--surface));
+  }
+
+  /* ── segmented control ────────────────────────────────────────────────── */
+  .seg {
+    display: inline-flex;
+    padding: 3px;
+    background: hsl(var(--surface-2));
+    border-radius: 10px;
+    border: 1px solid hsl(var(--border-soft));
+  }
+  .seg button {
+    padding: 5px 12px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 7px;
+    color: hsl(var(--text-muted));
+    transition: background-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+  }
+  .seg button:hover { color: hsl(var(--foreground)); }
+  .seg button.on,
+  .seg button[data-state="on"],
+  .seg button[aria-pressed="true"] {
+    background: hsl(var(--surface));
+    color: hsl(var(--foreground));
+    box-shadow: 0 1px 2px hsl(0 0% 0% / 0.08), 0 1px 0 hsl(0 0% 100% / 0.05) inset;
+  }
+
+  /* ── data table primitive ─────────────────────────────────────────────── */
+  .tbl { width: 100%; font-size: 13px; }
+  .tbl th {
+    text-align: left;
+    font-weight: 500;
+    color: hsl(var(--text-dim));
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 10px 14px;
+  }
+  .tbl td {
+    padding: 12px 14px;
+    border-top: 1px solid hsl(var(--border-soft));
+    color: hsl(var(--foreground));
+  }
+  .tbl tr:hover td { background: hsl(var(--surface-2)); }
+
+  /* ── tabs (inline underline) ──────────────────────────────────────────── */
+  .tab {
+    padding: 9px 4px;
+    font-size: 13px;
+    color: hsl(var(--text-muted));
+    border-bottom: 2px solid transparent;
+    font-weight: 500;
+    cursor: pointer;
+  }
+  .tab.active { color: hsl(var(--foreground)); border-color: hsl(var(--primary)); }
+
+  /* ── switch ───────────────────────────────────────────────────────────── */
+  .switch {
+    width: 36px;
+    height: 20px;
+    border-radius: 999px;
+    background: hsl(var(--surface-2));
+    border: 1px solid hsl(var(--border-soft));
+    position: relative;
+    transition: all 0.15s;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: 1px; left: 1px;
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    background: hsl(var(--text-muted));
+    transition: all 0.15s;
+  }
+  .switch.on { background: hsl(var(--primary)); border-color: transparent; }
+  .switch.on::after { left: 17px; background: white; }
+
+  /* ── frame (composition wrapper) ──────────────────────────────────────── */
+  .frame {
+    border-radius: 22px;
+    overflow: hidden;
+    border: 1px solid hsl(var(--border));
+    background: hsl(var(--background));
+  }
+
+  /* ── dotted canvas (map placeholder, hero canvases) ───────────────────── */
+  .canvas-grid {
+    background-image:
+      radial-gradient(circle at 1px 1px, hsl(var(--border-soft)) 1px, transparent 0);
+    background-size: 22px 22px;
   }
 }
 
 @layer utilities {
-  .scrollbar-thin::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+  /* ── typography utilities ─────────────────────────────────────────────── */
+  .font-mono {
+    font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-feature-settings: "tnum" 1, "zero" 1;
   }
-  .scrollbar-thin::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-muted-foreground/20;
+  .font-display {
+    font-family: var(--font-display, var(--font-sans)), "Noto Sans Georgian", system-ui, sans-serif;
+    letter-spacing: -0.025em;
   }
+  .num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1, "ss01" 1; }
+  .big-num {
+    font-family: var(--font-display, var(--font-sans)), system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── shadow elevation tokens ──────────────────────────────────────────── */
+  .shadow-1 { box-shadow: 0 1px 2px hsl(0 0% 0% / 0.06), 0 2px 6px hsl(0 0% 0% / 0.04); }
+  .dark .shadow-1 { box-shadow: 0 1px 2px hsl(0 0% 0% / 0.4); }
+
+  /* ── scrollbar ────────────────────────────────────────────────────────── */
+  .scrollbar-thin::-webkit-scrollbar { width: 6px; height: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 999px; }
+  .scrollbar-thin::-webkit-scrollbar-track { background: transparent; }
+
+  /* ── glass / mesh (kept for backwards-compat with existing pages) ─────── */
   .glass {
-    @apply bg-background/60 backdrop-blur-xl;
+    background: hsl(var(--background) / 0.7);
+    backdrop-filter: blur(20px);
   }
-  .flat-card {
-    @apply rounded-2xl border bg-card text-card-foreground;
-  }
+  .flat-card { @apply rounded-2xl border bg-card text-card-foreground; }
   .gradient-mesh {
     background:
       radial-gradient(at 20% 20%, hsl(var(--primary) / 0.15) 0, transparent 50%),
       radial-gradient(at 80% 10%, hsl(var(--success) / 0.12) 0, transparent 50%),
       radial-gradient(at 50% 80%, hsl(var(--warning) / 0.1) 0, transparent 55%);
   }
+
+  /* ── sparkline svg colors ─────────────────────────────────────────────── */
+  .sparkline path.area { fill: hsl(var(--primary)); fill-opacity: 0.12; }
+  .sparkline path.line { stroke: hsl(var(--primary)); stroke-width: 1.6; fill: none; }
 }
 
+/* ============================================================================
+ * Print
+ * ============================================================================
+ */
 @media print {
-  .no-print {
-    display: none !important;
-  }
+  .no-print { display: none !important; }
 }

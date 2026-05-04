@@ -3,15 +3,21 @@
 import * as React from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Loader2, Plus, Trash2, MessageSquareWarning } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  StockItemPicker,
+  type PickedStockItem,
+} from "@/components/app/stock-item-picker";
 import {
   addQuotationLine,
   updateQuotationLine,
   deleteQuotationLine,
 } from "@/app/[locale]/(dashboard)/quotations/actions";
+import { QuotationLineThread } from "@/components/app/quotation-line-thread";
+import type { ChatMessage } from "@/components/app/quotation-chat-panel";
 
 export interface QuotationLineRow {
   id: string;
@@ -19,6 +25,15 @@ export interface QuotationLineRow {
   quantity: number;
   unitPrice: number;
   total: number;
+  itemId?: string | null;
+  /** Customer-side negotiation columns. Populated only on the admin page. */
+  customerStatus?: string | null;
+  customerNote?: string | null;
+  proposedDescription?: string | null;
+  proposedQuantity?: number | null;
+  proposedUnitPrice?: number | null;
+  /** Per-line chat thread messages. Populated only on the admin page. */
+  messages?: ChatMessage[];
 }
 
 export function QuotationLinesEditor({
@@ -37,10 +52,16 @@ export function QuotationLinesEditor({
   const t = useTranslations();
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
-  const [draft, setDraft] = React.useState({
+  const [draft, setDraft] = React.useState<{
+    description: string;
+    quantity: number;
+    unitPrice: number;
+    itemId: string | null;
+  }>({
     description: "",
     quantity: 1,
     unitPrice: 0,
+    itemId: null,
   });
 
   const fmt = React.useCallback(
@@ -64,8 +85,9 @@ export function QuotationLinesEditor({
         description: draft.description,
         quantity: draft.quantity,
         unitPrice: draft.unitPrice,
+        itemId: draft.itemId,
       });
-      setDraft({ description: "", quantity: 1, unitPrice: 0 });
+      setDraft({ description: "", quantity: 1, unitPrice: 0, itemId: null });
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.error"));
@@ -81,6 +103,7 @@ export function QuotationLinesEditor({
         description: line.description,
         quantity: line.quantity,
         unitPrice: line.unitPrice,
+        itemId: line.itemId ?? null,
       });
       router.refresh();
     } catch (err) {
@@ -88,6 +111,17 @@ export function QuotationLinesEditor({
     } finally {
       setBusy(false);
     }
+  }
+
+  function applyPickedItem(picked: PickedStockItem) {
+    setDraft({
+      description: picked.description?.trim()
+        ? `${picked.name} — ${picked.description}`
+        : picked.name,
+      quantity: 1,
+      unitPrice: picked.unitPrice,
+      itemId: picked.id,
+    });
   }
 
   async function removeRow(id: string) {
@@ -142,6 +176,8 @@ export function QuotationLinesEditor({
                   readOnly={!!readOnly || busy}
                   onSave={persistRow}
                   onRemove={() => removeRow(l.id)}
+                  quotationId={quotationId}
+                  locale={locale}
                 />
               ))
             )}
@@ -152,13 +188,14 @@ export function QuotationLinesEditor({
       {!readOnly && (
         <form
           onSubmit={addLine}
-          className="grid grid-cols-1 gap-2 rounded-lg border bg-muted/30 p-3 sm:grid-cols-[1fr_100px_140px_auto]"
+          className="grid grid-cols-1 gap-2 rounded-lg border bg-muted/30 p-3 sm:grid-cols-[180px_1fr_100px_140px_auto]"
         >
+          <StockItemPicker onPick={applyPickedItem} disabled={busy} />
           <Input
             placeholder={t("quotations.lines.description")}
             value={draft.description}
             onChange={(e) =>
-              setDraft((d) => ({ ...d, description: e.target.value }))
+              setDraft((d) => ({ ...d, description: e.target.value, itemId: null }))
             }
           />
           <Input
@@ -199,13 +236,18 @@ function LineRow({
   readOnly,
   onSave,
   onRemove,
+  quotationId,
+  locale,
 }: {
   line: QuotationLineRow;
   fmt: (n: number) => string;
   readOnly: boolean;
   onSave: (l: QuotationLineRow) => void;
   onRemove: () => void;
+  quotationId: string;
+  locale: string;
 }) {
+  const t = useTranslations();
   const [editing, setEditing] = React.useState({
     description: line.description,
     quantity: line.quantity,
@@ -221,12 +263,38 @@ function LineRow({
     onSave({ ...line, ...editing });
   }
 
+  function tx(key: string, fb: string): string {
+    return t.has(key) ? t(key) : fb;
+  }
+
   const liveTotal = editing.quantity * editing.unitPrice;
+  const hasCustomerCounter = line.customerStatus === "MODIFIED";
+  const hasCustomerAccept = line.customerStatus === "ACCEPTED";
+  const thread = (
+    <QuotationLineThread
+      quotationId={quotationId}
+      lineId={line.id}
+      messages={line.messages ?? []}
+      viewerRole="ADMIN"
+      locale={locale}
+      legacyCustomerNote={line.customerNote}
+    />
+  );
 
   if (readOnly) {
     return (
       <tr>
-        <td className="px-3 py-2">{line.description}</td>
+        <td className="px-3 py-2">
+          <div>{line.description}</div>
+          <CustomerHint
+            line={line}
+            fmt={fmt}
+            hasCounter={hasCustomerCounter}
+            hasAccept={hasCustomerAccept}
+            tx={tx}
+          />
+          {thread}
+        </td>
         <td className="px-3 py-2 text-right font-mono">{line.quantity}</td>
         <td className="px-3 py-2 text-right font-mono">{fmt(line.unitPrice)}</td>
         <td className="px-3 py-2 text-right font-mono">{fmt(line.total)}</td>
@@ -245,6 +313,14 @@ function LineRow({
           onBlur={commit}
           className="h-8"
         />
+        <CustomerHint
+          line={line}
+          fmt={fmt}
+          hasCounter={hasCustomerCounter}
+          hasAccept={hasCustomerAccept}
+          tx={tx}
+        />
+        {thread}
       </td>
       <td className="px-2 py-1 text-right">
         <Input
@@ -286,4 +362,43 @@ function LineRow({
       </td>
     </tr>
   );
+}
+
+function CustomerHint({
+  line,
+  fmt,
+  hasCounter,
+  hasAccept,
+  tx,
+}: {
+  line: QuotationLineRow;
+  fmt: (n: number) => string;
+  hasCounter: boolean;
+  hasAccept: boolean;
+  tx: (key: string, fb: string) => string;
+}) {
+  if (hasCounter) {
+    const q = line.proposedQuantity ?? line.quantity;
+    const p = line.proposedUnitPrice ?? line.unitPrice;
+    const desc = line.proposedDescription ?? line.description;
+    return (
+      <div className="mt-1 rounded-md border border-amber-300 bg-amber-50 px-2 py-1 text-[11px] text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+        <div className="flex items-center gap-1 font-medium">
+          <MessageSquareWarning className="h-3 w-3" />
+          {tx("quotations.portal.customerAskedHint", "Customer asked")}:
+        </div>
+        <div className="mt-0.5 font-mono">
+          {desc} · {q} × {fmt(p)} = {fmt(q * p)}
+        </div>
+      </div>
+    );
+  }
+  if (hasAccept) {
+    return (
+      <div className="mt-1 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-medium text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
+        {tx("quotations.portal.customerAcceptedHint", "Customer accepted")}
+      </div>
+    );
+  }
+  return null;
 }

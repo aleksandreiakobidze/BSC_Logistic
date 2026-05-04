@@ -18,8 +18,11 @@ import {
   validateCustomFieldValue,
   type CustomFieldDefinitionView,
   type CustomFieldEntity,
+  type CustomFieldGroupView,
   type CustomFieldOption,
 } from "@/lib/custom-fields";
+
+const ALLOWED_WIDTHS = [3, 4, 6, 12] as const;
 
 const definitionSchema = z.object({
   id: z.string().optional(),
@@ -39,6 +42,14 @@ const definitionSchema = z.object({
   }).default({}),
   sortOrder: z.number().int().default(0),
   isActive: z.boolean().default(true),
+  groupKey: z.string().max(48).optional().nullable(),
+  width: z
+    .number()
+    .int()
+    .refine((v) => ALLOWED_WIDTHS.includes(v as (typeof ALLOWED_WIDTHS)[number]))
+    .default(12),
+  showInList: z.boolean().default(false),
+  multiline: z.boolean().default(false),
 });
 
 type DefinitionPayload = z.infer<typeof definitionSchema>;
@@ -70,7 +81,12 @@ function toDefinitionView(definition: {
   validationJson: string | null;
   sortOrder: number;
   isActive: boolean;
+  groupKey?: string | null;
+  width?: number | null;
+  showInList?: boolean | null;
+  multiline?: boolean | null;
 }): CustomFieldDefinitionView {
+  const width = definition.width ?? 12;
   return {
     id: definition.id,
     entityType: definition.entityType as CustomFieldEntity,
@@ -85,6 +101,10 @@ function toDefinitionView(definition: {
     validation: parseValidation(definition.validationJson),
     sortOrder: definition.sortOrder,
     isActive: definition.isActive,
+    groupKey: definition.groupKey ?? null,
+    width: ALLOWED_WIDTHS.includes(width as (typeof ALLOWED_WIDTHS)[number]) ? width : 12,
+    showInList: !!definition.showInList,
+    multiline: !!definition.multiline,
   };
 }
 
@@ -111,6 +131,10 @@ function prepareDefinition(payload: DefinitionPayload) {
       : null,
     sortOrder: payload.sortOrder,
     isActive: payload.isActive,
+    groupKey: payload.groupKey?.trim() || null,
+    width: payload.width,
+    showInList: payload.showInList,
+    multiline: payload.type === CustomFieldType.TEXT ? payload.multiline : false,
   };
 }
 
@@ -217,6 +241,151 @@ export async function reorderCustomFieldDefinitions(ids: string[]) {
   await audit({
     action: "customField.definition.reorder",
     entity: "CustomFieldDefinition",
+    orgId,
+    userId: session.user.id,
+    meta: { ids },
+  });
+  revalidatePath("/settings/custom-fields");
+  return { ok: true };
+}
+
+// ─── Custom field groups ────────────────────────────────────────────────────
+
+const groupSchema = z.object({
+  id: z.string().optional(),
+  entityType: z
+    .string()
+    .refine((v) => customFieldEntities.includes(v as CustomFieldEntity)),
+  key: z.string().min(1).max(48),
+  label: z.string().min(1).max(80),
+  sortOrder: z.number().int().default(0),
+});
+
+function toGroupView(g: {
+  id: string;
+  entityType: string;
+  key: string;
+  label: string;
+  sortOrder: number;
+}): CustomFieldGroupView {
+  return {
+    id: g.id,
+    entityType: g.entityType as CustomFieldEntity,
+    key: g.key,
+    label: g.label,
+    sortOrder: g.sortOrder,
+  };
+}
+
+export async function getCustomFieldGroups(
+  orgId: string,
+  entityType: CustomFieldEntity,
+): Promise<CustomFieldGroupView[]> {
+  const rows = await prisma.customFieldGroup.findMany({
+    where: { orgId, entityType },
+    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+  });
+  return rows.map(toGroupView);
+}
+
+export async function listCustomFieldGroups(entityType: CustomFieldEntity) {
+  const { orgId } = await requireRole(["ADMIN"]);
+  return getCustomFieldGroups(orgId, entityType);
+}
+
+export async function createCustomFieldGroup(
+  payload: z.input<typeof groupSchema>,
+) {
+  const { session, orgId } = await requireRole(["ADMIN"]);
+  const parsed = groupSchema.parse(payload);
+  const key = normalizeCustomFieldKey(parsed.key);
+  if (!key) throw new Error("Invalid group key");
+  const group = await prisma.customFieldGroup.create({
+    data: {
+      orgId,
+      entityType: parsed.entityType,
+      key,
+      label: parsed.label.trim(),
+      sortOrder: parsed.sortOrder,
+    },
+  });
+  await audit({
+    action: "customField.group.create",
+    entity: "CustomFieldGroup",
+    entityId: group.id,
+    orgId,
+    userId: session.user.id,
+    meta: { entityType: parsed.entityType, key },
+  });
+  revalidatePath("/settings/custom-fields");
+  return { ok: true, group: toGroupView(group) };
+}
+
+export async function updateCustomFieldGroup(
+  payload: z.input<typeof groupSchema>,
+) {
+  const { session, orgId } = await requireRole(["ADMIN"]);
+  const parsed = groupSchema.extend({ id: z.string().min(1) }).parse(payload);
+  const group = await prisma.customFieldGroup.update({
+    where: { id: parsed.id, orgId },
+    data: {
+      label: parsed.label.trim(),
+      sortOrder: parsed.sortOrder,
+    },
+  });
+  await audit({
+    action: "customField.group.update",
+    entity: "CustomFieldGroup",
+    entityId: group.id,
+    orgId,
+    userId: session.user.id,
+    meta: { entityType: parsed.entityType, key: group.key },
+  });
+  revalidatePath("/settings/custom-fields");
+  return { ok: true, group: toGroupView(group) };
+}
+
+export async function deleteCustomFieldGroup(id: string) {
+  const { session, orgId } = await requireRole(["ADMIN"]);
+  const existing = await prisma.customFieldGroup.findFirst({
+    where: { id, orgId },
+  });
+  if (!existing) throw new Error("Group not found");
+
+  // Reassign all defs in this group back to "Other" (null) instead of failing.
+  await prisma.$transaction([
+    prisma.customFieldDefinition.updateMany({
+      where: { orgId, entityType: existing.entityType, groupKey: existing.key },
+      data: { groupKey: null },
+    }),
+    prisma.customFieldGroup.delete({ where: { id } }),
+  ]);
+
+  await audit({
+    action: "customField.group.delete",
+    entity: "CustomFieldGroup",
+    entityId: id,
+    orgId,
+    userId: session.user.id,
+    meta: { entityType: existing.entityType, key: existing.key },
+  });
+  revalidatePath("/settings/custom-fields");
+  return { ok: true };
+}
+
+export async function reorderCustomFieldGroups(ids: string[]) {
+  const { session, orgId } = await requireRole(["ADMIN"]);
+  await prisma.$transaction(
+    ids.map((id, index) =>
+      prisma.customFieldGroup.update({
+        where: { id, orgId },
+        data: { sortOrder: index },
+      }),
+    ),
+  );
+  await audit({
+    action: "customField.group.reorder",
+    entity: "CustomFieldGroup",
     orgId,
     userId: session.user.id,
     meta: { ids },

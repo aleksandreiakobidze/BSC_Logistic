@@ -5,8 +5,9 @@ import { routing } from "./i18n/routing";
 const intlMiddleware = createIntlMiddleware(routing);
 
 const PROTECTED = [
-  /^\/(en|ka|ru)?\/?(overview|orders|shipments|dispatch|tracking|fleet|drivers|customers|warehouse|invoices|expenses|reports|settings|driver)(\/|$)/,
+  /^\/(en|ka|ru)?\/?(overview|orders|shipments|dispatch|tracking|fleet|drivers|customers|warehouse|invoices|expenses|reports|settings|driver|quotations)(\/|$)/,
   /^\/(en|ka|ru)?\/portal\/my(\/|$)/,
+  /^\/(en|ka|ru)?\/portal\/quotations(\/|$)/,
 ];
 
 export default async function middleware(req: NextRequest) {

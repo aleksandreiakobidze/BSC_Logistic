@@ -15,15 +15,23 @@ const config: Config = {
     },
     extend: {
       fontFamily: {
-        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        sans: ["var(--font-sans)", "Noto Sans Georgian", "system-ui", "sans-serif"],
+        mono: ["var(--font-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+        display: ["var(--font-display)", "var(--font-sans)", "Noto Sans Georgian", "sans-serif"],
         geo: ["var(--font-geo)", "var(--font-sans)", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
+        "border-soft": "hsl(var(--border-soft))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
+        surface: "hsl(var(--surface))",
+        "surface-2": "hsl(var(--surface-2))",
+        elevated: "hsl(var(--elevated))",
+        "text-muted": "hsl(var(--text-muted))",
+        "text-dim": "hsl(var(--text-dim))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -35,6 +43,10 @@ const config: Config = {
         destructive: {
           DEFAULT: "hsl(var(--destructive))",
           foreground: "hsl(var(--destructive-foreground))",
+        },
+        danger: {
+          DEFAULT: "hsl(var(--danger))",
+          foreground: "hsl(var(--danger-foreground))",
         },
         muted: {
           DEFAULT: "hsl(var(--muted))",

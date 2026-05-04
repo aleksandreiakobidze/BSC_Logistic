@@ -175,7 +175,7 @@ export function ContactPicker({
       )}
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" withDescription>
           <DialogHeader>
             <DialogTitle>{t("leads.createNewContact")}</DialogTitle>
             <DialogDescription>

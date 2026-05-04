@@ -16,3 +16,10 @@ test-results
 prisma/.migrations-lock
 prisma/prod.db
 prisma/prod.db-journal
+
+# claude.ai/design handoff bundle (kept locally for reference)
+design-import/
+design.bin
+
+# user-uploaded files (custom-field FILE inputs, org logos, etc.)
+public/uploads/
