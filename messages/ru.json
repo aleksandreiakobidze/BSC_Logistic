@@ -564,6 +564,11 @@
     "searchPlaceholder": "Поиск по номеру или клиенту…",
     "details": "Детали",
     "totals": "Итого",
+    "history": {
+      "openButton": "История",
+      "title": "История версий",
+      "empty": "Изменений пока нет"
+    },
     "convertedOrders": "Заказы из предложения",
     "viewOrder": "Открыть заказ продажи",
     "number": "Номер",

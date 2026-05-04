@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import {
   MessageSquare,
   Send,
@@ -16,12 +15,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { postQuotationMessage } from "@/app/[locale]/(dashboard)/quotations/actions";
 import type { ChatMessage } from "@/components/app/quotation-chat-panel";
+import { useQuotationRealtime } from "@/components/app/quotation-realtime";
 
 /**
  * Per-line comment thread. Renders a small "Comment" toggle next to the line;
- * tapping it expands a compact thread + composer. If `messages` already has
- * entries we show the count and start expanded so the customer sees prior
- * questions immediately.
+ * tapping it expands a compact thread + composer. Messages are kept in local
+ * state and topped up by the surrounding `QuotationRealtimeProvider` so a
+ * counterparty's reply appears without a manual refresh.
  *
  * Used inline by both the customer-portal editor and the admin lines editor,
  * so the same component handles both viewer roles.
@@ -29,7 +29,7 @@ import type { ChatMessage } from "@/components/app/quotation-chat-panel";
 export function QuotationLineThread({
   quotationId,
   lineId,
-  messages,
+  messages: initialMessages,
   viewerRole,
   locale,
   legacyCustomerNote,
@@ -47,8 +47,8 @@ export function QuotationLineThread({
   legacyCustomerNote?: string | null;
 }) {
   const t = useTranslations();
-  const router = useRouter();
-  const [open, setOpen] = React.useState(messages.length > 0);
+  const [messages, setMessages] = React.useState<ChatMessage[]>(initialMessages);
+  const [open, setOpen] = React.useState(initialMessages.length > 0);
   const [body, setBody] = React.useState("");
   const [busy, setBusy] = React.useState(false);
 
@@ -56,14 +56,73 @@ export function QuotationLineThread({
     return t.has(key) ? t(key) : fb;
   }
 
+  // Keep in sync with the latest server snapshot, while preserving any
+  // locally-appended (yet-to-be-rehydrated) messages.
+  React.useEffect(() => {
+    setMessages((prev) => {
+      const seen = new Set(initialMessages.map((m) => m.id));
+      const extras = prev.filter((m) => !seen.has(m.id));
+      if (extras.length === 0) return initialMessages;
+      return [...initialMessages, ...extras].sort((a, b) =>
+        a.createdAt.localeCompare(b.createdAt),
+      );
+    });
+    if (initialMessages.length > 0) {
+      setOpen((prevOpen) => prevOpen || true);
+    }
+  }, [initialMessages]);
+
+  useQuotationRealtime((event) => {
+    if (event.type !== "message") return;
+    if (event.message.quotationId !== quotationId) return;
+    if (event.message.lineId !== lineId) return;
+    setMessages((prev) => {
+      if (prev.some((m) => m.id === event.message.id)) return prev;
+      return [
+        ...prev,
+        {
+          id: event.message.id,
+          body: event.message.body,
+          createdAt: event.message.createdAt,
+          authorRole: event.message.authorRole,
+          authorName: event.message.authorName,
+          lineId: event.message.lineId,
+        },
+      ];
+    });
+    // Pop the thread open so the recipient actually notices the reply.
+    if (event.message.authorRole !== viewerRole) {
+      setOpen(true);
+    }
+  });
+
   async function onSend() {
     const trimmed = body.trim();
     if (!trimmed) return;
     setBusy(true);
     try {
-      await postQuotationMessage({ quotationId, lineId, body: trimmed });
+      const result = await postQuotationMessage({
+        quotationId,
+        lineId,
+        body: trimmed,
+      });
+      const sent = result.message;
+      // Optimistic append; SSE echo will be deduped by id.
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === sent.id)) return prev;
+        return [
+          ...prev,
+          {
+            id: sent.id,
+            body: sent.body,
+            createdAt: sent.createdAt,
+            authorRole: sent.authorRole,
+            authorName: sent.authorName,
+            lineId: sent.lineId,
+          },
+        ];
+      });
       setBody("");
-      router.refresh();
     } catch (err) {
       toast.error(
         err instanceof Error

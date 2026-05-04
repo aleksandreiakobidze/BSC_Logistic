@@ -564,6 +564,11 @@
     "searchPlaceholder": "Search by number or customer…",
     "details": "Details",
     "totals": "Totals",
+    "history": {
+      "openButton": "View history",
+      "title": "Version history",
+      "empty": "No revisions yet"
+    },
     "convertedOrders": "Converted to orders",
     "viewOrder": "View sales order",
     "number": "Number",

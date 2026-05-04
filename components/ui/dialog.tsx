@@ -32,9 +32,9 @@ type DialogContentProps = React.ComponentPropsWithoutRef<typeof DialogPrimitive.
   description?: React.ReactNode;
   /**
    * Set `true` when this dialog’s children include `<DialogDescription>` so
-   * `aria-describedby` stays linked to that node. When `false` (default) and
-   * there is no `description` prop, we set `aria-describedby=""` to satisfy
-   * Radix 1.1’s check for dialogs that only have a title.
+   * `aria-describedby` stays linked to that node. When `false` (default), this
+   * wrapper renders a screen-reader-only description so Radix's accessibility
+   * check has a real target and doesn't emit a dev-overlay console error.
    */
   withDescription?: boolean;
 };
@@ -44,13 +44,16 @@ const DialogContent = React.forwardRef<
   DialogContentProps
 >(({ className, children, description, withDescription = false, ...props }, ref) => {
   const { "aria-describedby": ariaDescribedByProp, ...restProps } = props;
+  const generatedDescriptionId = React.useId();
 
   const ariaDescribedBy =
     ariaDescribedByProp !== undefined
       ? ariaDescribedByProp
-      : withDescription || description != null
+      : withDescription
         ? undefined
-        : "";
+        : generatedDescriptionId;
+  const shouldRenderGeneratedDescription =
+    !withDescription && ariaDescribedByProp === undefined;
 
   return (
     <DialogPortal>
@@ -65,9 +68,9 @@ const DialogContent = React.forwardRef<
         {...restProps}
         aria-describedby={ariaDescribedBy}
       >
-        {description != null && (
-          <DialogPrimitive.Description className="sr-only">
-            {description}
+        {shouldRenderGeneratedDescription && (
+          <DialogPrimitive.Description id={generatedDescriptionId} className="sr-only">
+            {description ?? "Dialog content"}
           </DialogPrimitive.Description>
         )}
         {children}

@@ -14,8 +14,6 @@ import {
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
 import { submitCustomerProposal } from "@/app/[locale]/(dashboard)/quotations/actions";
 import { QuotationLineThread } from "@/components/app/quotation-line-thread";
 import type { ChatMessage } from "@/components/app/quotation-chat-panel";
@@ -72,7 +70,6 @@ export function CustomerQuoteEditor({
   const t = useTranslations();
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
-  const [message, setMessage] = React.useState("");
   const [drafts, setDrafts] = React.useState<Record<string, DraftLine>>(() =>
     Object.fromEntries(
       lines.map((l) => [
@@ -137,7 +134,6 @@ export function CustomerQuoteEditor({
       });
       const res = await submitCustomerProposal({
         quotationId,
-        message: message || undefined,
         lines: payload,
       });
       toast.success(
@@ -434,54 +430,6 @@ export function CustomerQuoteEditor({
         </table>
       </div>
 
-      <div className="space-y-2">
-        <Label className="text-xs">
-          {tx(
-            "quotations.portal.coverMessage",
-            "Message to vendor (optional)",
-          )}
-        </Label>
-        <Textarea
-          rows={3}
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder={tx(
-            "quotations.portal.coverPlaceholder",
-            "Anything you'd like to clarify about your response…",
-          )}
-        />
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border bg-muted/20 px-3 py-2">
-        <p className="text-xs text-muted-foreground">
-          {pendingCount > 0
-            ? tx(
-                "quotations.portal.willPending",
-                "Pick Accept or Modify on every line, then click Submit response.",
-              )
-            : anyModified
-              ? tx(
-                  "quotations.portal.willCounter",
-                  "Submitting will send your changes back to the vendor for review.",
-                )
-              : tx(
-                  "quotations.portal.willAccept",
-                  "All lines accepted — submitting will mark this quotation as accepted.",
-                )}
-        </p>
-        <Button
-          onClick={onSubmit}
-          disabled={busy || !allDecided}
-          className="gap-2"
-        >
-          {busy ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Send className="h-4 w-4" />
-          )}
-          {tx("quotations.portal.submit", "Submit response")}
-        </Button>
-      </div>
     </div>
   );
 }

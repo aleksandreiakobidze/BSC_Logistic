@@ -11,13 +11,12 @@ import {
   QuotationLinesEditor,
   type QuotationLineRow,
 } from "@/components/app/quotation-lines-editor";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
 import { QuotationStatus } from "@/lib/enums";
 import { buildLineDiff } from "@/lib/quotations";
 import { QuotationActionPanel } from "./action-panel";
 import { NegotiationPanel } from "./negotiation-panel";
 import {
-  QuotationVersionsView,
   type QuotationVersion,
 } from "@/components/app/quotation-versions-view";
 import { buildVersionsFromRevisions } from "@/lib/quotations-versions";
@@ -25,6 +24,8 @@ import {
   QuotationChatPanel,
   type ChatMessage,
 } from "@/components/app/quotation-chat-panel";
+import { QuotationRealtimeProvider } from "@/components/app/quotation-realtime";
+import { QuotationHistoryButton } from "@/components/app/quotation-history-sheet";
 import { markQuotationMessagesRead } from "../actions";
 
 export default async function QuotationDetailPage({
@@ -71,7 +72,6 @@ export default async function QuotationDetailPage({
   });
   if (!q) notFound();
 
-  // Reset the admin-side unread badge now that the page has been opened.
   await markQuotationMessagesRead(q.id);
 
   const diff = buildLineDiff(
@@ -160,205 +160,150 @@ export default async function QuotationDetailPage({
   }, 0);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={
-          <span className="flex items-center gap-3">
-            <Link
-              href="/quotations"
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Link>
-            <FileSignature className="h-5 w-5 text-muted-foreground" />
-            {q.number}
-            <StatusBadge
-              kind="quotation"
-              status={q.status}
-              label={t(`quotations.status.${q.status}`)}
-            />
-          </span>
-        }
-        description={q.customer.name}
-      />
+    <QuotationRealtimeProvider quotationId={q.id} viewerRole="ADMIN">
+      <div className="space-y-6">
+        <PageHeader
+          title={
+            <span className="flex items-center gap-3">
+              <Link
+                href="/quotations"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </Link>
+              <FileSignature className="h-5 w-5 text-muted-foreground" />
+              {q.number}
+              <StatusBadge
+                kind="quotation"
+                status={q.status}
+                label={t(`quotations.status.${q.status}`)}
+              />
+            </span>
+          }
+          description={q.customer.name}
+          actions={
+            <QuotationHistoryButton versions={versions} locale={locale} />
+          }
+        />
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
-          {q.status === QuotationStatus.COUNTERED && (
-            <NegotiationPanel
-              quotationId={q.id}
-              diff={diff}
-              currency={q.currency}
-              liveTotal={liveTotal}
-              customerTotal={customerTotal}
-              lineMessages={Object.fromEntries(messagesByLine)}
-            />
-          )}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>{t("quotations.lines.title")}</CardTitle>
-              <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                {q.currency}
-              </span>
-            </CardHeader>
-            <CardContent>
-              <QuotationLinesEditor
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="min-w-0 space-y-4">
+            {q.status === QuotationStatus.COUNTERED && (
+              <NegotiationPanel
                 quotationId={q.id}
-                lines={lines}
+                diff={diff}
                 currency={q.currency}
-                locale={locale}
-                readOnly={!editable}
+                liveTotal={liveTotal}
+                customerTotal={customerTotal}
+                lineMessages={Object.fromEntries(messagesByLine)}
               />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("quotations.totals")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1.5 font-mono text-sm">
-              <Row
-                label={t("quotations.subtotal")}
-                value={formatCurrency(Number(q.subtotal), q.currency, locale)}
-              />
-              <Row
-                label={t("quotations.discount")}
-                value={formatCurrency(Number(q.discount), q.currency, locale)}
-              />
-              <Row
-                label={`${t("quotations.taxAmount")} (${Number(q.taxRate)}%)`}
-                value={formatCurrency(Number(q.taxAmount), q.currency, locale)}
-              />
-              <div className="my-2 border-t" />
-              <Row
-                label={t("quotations.total")}
-                value={formatCurrency(Number(q.total), q.currency, locale)}
-                strong
-              />
-            </CardContent>
-          </Card>
-
-          {versions.length > 0 && (
-            <QuotationVersionsView versions={versions} locale={locale} />
-          )}
-        </div>
-
-        <div className="space-y-4 lg:col-span-1">
-          <QuotationActionPanel
-            quotationId={q.id}
-            status={q.status}
-            convertedOrderId={q.convertedOrders[0]?.id}
-          />
-
-          <QuotationChatPanel
-            quotationId={q.id}
-            messages={chatMessages}
-            viewerRole="ADMIN"
-            locale={locale}
-          />
-
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("quotations.details")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <Row
-                label={t("orders.customer")}
-                value={
-                  <Link
-                    href={`/customers/${q.customer.id}`}
-                    className="hover:underline"
-                  >
-                    {q.customer.name}
-                  </Link>
-                }
-              />
-              {q.contact && (
-                <Row
-                  label={t("contacts.title")}
-                  value={
-                    <Link
-                      href={`/contacts`}
-                      className="hover:underline"
-                    >
-                      {q.contact.name}
-                    </Link>
-                  }
-                />
-              )}
-              {q.lead && (
-                <Row
-                  label={t("leads.title")}
-                  value={
-                    <Link
-                      href={`/leads/${q.lead.id}`}
-                      className="hover:underline"
-                    >
-                      {q.lead.name}
-                    </Link>
-                  }
-                />
-              )}
-              {q.owner && (
-                <Row
-                  label={t("common.owner") ?? "Owner"}
-                  value={q.owner.name ?? "—"}
-                />
-              )}
-              <Row
-                label={t("quotations.validUntil")}
-                value={q.validUntil ? formatDate(q.validUntil, locale) : "—"}
-              />
-              <Row
-                label={t("common.created")}
-                value={formatDate(q.createdAt, locale)}
-              />
-              {q.sentAt && (
-                <Row
-                  label={t("quotations.sentAt")}
-                  value={formatDate(q.sentAt, locale)}
-                />
-              )}
-              {q.acceptedAt && (
-                <Row
-                  label={t("quotations.acceptedAt")}
-                  value={formatDate(q.acceptedAt, locale)}
-                />
-              )}
-              {q.convertedAt && (
-                <Row
-                  label={t("quotations.convertedAt")}
-                  value={formatDate(q.convertedAt, locale)}
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          {q.convertedOrders.length > 0 && (
+            )}
             <Card>
-              <CardHeader>
-                <CardTitle>{t("quotations.convertedOrders")}</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>{t("quotations.lines.title")}</CardTitle>
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                  {q.currency}
+                </span>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm">
-                {q.convertedOrders.map((o) => (
-                  <Link
-                    key={o.id}
-                    href={`/orders/${o.id}`}
-                    className="flex items-center justify-between rounded-md border px-3 py-2 hover:bg-muted/30"
-                  >
-                    <span className="font-medium">{o.number}</span>
-                    <StatusBadge
-                      kind="order"
-                      status={o.status}
-                      label={o.status}
-                    />
-                  </Link>
-                ))}
+              <CardContent>
+                <QuotationLinesEditor
+                  quotationId={q.id}
+                  lines={lines}
+                  currency={q.currency}
+                  locale={locale}
+                  readOnly={!editable}
+                />
+                <TotalsFooter
+                  subtotal={Number(q.subtotal)}
+                  discount={Number(q.discount)}
+                  taxAmount={Number(q.taxAmount)}
+                  taxRate={Number(q.taxRate)}
+                  total={Number(q.total)}
+                  currency={q.currency}
+                  locale={locale}
+                  labels={{
+                    subtotal: t("quotations.subtotal"),
+                    discount: t("quotations.discount"),
+                    tax: t("quotations.taxAmount"),
+                    total: t("quotations.total"),
+                  }}
+                />
               </CardContent>
             </Card>
-          )}
+          </div>
+
+          <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pr-1">
+            <QuotationActionPanel
+              quotationId={q.id}
+              status={q.status}
+              convertedOrderId={q.convertedOrders[0]?.id}
+              meta={{
+                customer: { id: q.customer.id, name: q.customer.name },
+                contact: q.contact
+                  ? { id: q.contact.id, name: q.contact.name }
+                  : null,
+                lead: q.lead ? { id: q.lead.id, name: q.lead.name } : null,
+                owner: q.owner ? { name: q.owner.name } : null,
+                validUntil: q.validUntil ? q.validUntil.toISOString() : null,
+                createdAt: q.createdAt.toISOString(),
+                sentAt: q.sentAt ? q.sentAt.toISOString() : null,
+                acceptedAt: q.acceptedAt ? q.acceptedAt.toISOString() : null,
+                convertedAt: q.convertedAt ? q.convertedAt.toISOString() : null,
+                convertedOrders: q.convertedOrders,
+              }}
+            />
+
+            <QuotationChatPanel
+              quotationId={q.id}
+              messages={chatMessages}
+              viewerRole="ADMIN"
+              locale={locale}
+            />
+          </aside>
         </div>
       </div>
+    </QuotationRealtimeProvider>
+  );
+}
+
+function TotalsFooter({
+  subtotal,
+  discount,
+  taxAmount,
+  taxRate,
+  total,
+  currency,
+  locale,
+  labels,
+}: {
+  subtotal: number;
+  discount: number;
+  taxAmount: number;
+  taxRate: number;
+  total: number;
+  currency: string;
+  locale: string;
+  labels: {
+    subtotal: string;
+    discount: string;
+    tax: string;
+    total: string;
+  };
+}) {
+  return (
+    <div className="mt-4 ml-auto w-full max-w-sm space-y-1 border-t pt-3 text-sm font-mono">
+      <Row label={labels.subtotal} value={formatCurrency(subtotal, currency, locale)} />
+      <Row label={labels.discount} value={formatCurrency(discount, currency, locale)} />
+      <Row
+        label={`${labels.tax} (${taxRate}%)`}
+        value={formatCurrency(taxAmount, currency, locale)}
+      />
+      <div className="my-1 border-t" />
+      <Row
+        label={labels.total}
+        value={formatCurrency(total, currency, locale)}
+        strong
+      />
     </div>
   );
 }

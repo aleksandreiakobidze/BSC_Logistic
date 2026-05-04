@@ -72,7 +72,7 @@ export function NewQuotationButton({ customers }: NewQuotationButtonProps) {
         <Plus className="mr-2 h-4 w-4" />
         {t("quotations.newQuotation")}
       </Button>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md" description={t("quotations.description")}>
         <DialogHeader>
           <DialogTitle>{t("quotations.newQuotation")}</DialogTitle>
         </DialogHeader>

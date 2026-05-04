@@ -11,7 +11,6 @@ import { QuotationStatus } from "@/lib/enums";
 import { CustomerQuoteEditor } from "./customer-quote-editor";
 import { WrongAccountNotice } from "../wrong-account-notice";
 import {
-  QuotationVersionsView,
   type QuotationVersion,
 } from "@/components/app/quotation-versions-view";
 import { buildVersionsFromRevisions } from "@/lib/quotations-versions";
@@ -19,6 +18,8 @@ import {
   QuotationChatPanel,
   type ChatMessage,
 } from "@/components/app/quotation-chat-panel";
+import { QuotationRealtimeProvider } from "@/components/app/quotation-realtime";
+import { QuotationHistoryButton } from "@/components/app/quotation-history-sheet";
 import { markQuotationMessagesRead } from "@/app/[locale]/(dashboard)/quotations/actions";
 
 export default async function PortalQuotationDetailPage({
@@ -96,14 +97,11 @@ export default async function PortalQuotationDetailPage({
   });
   if (!q) notFound();
 
-  // Reset the customer-side unread badge now that they've opened the page.
-  // Fire-and-forget; we don't want a slow update to block render.
   await markQuotationMessagesRead(q.id);
 
   const editable = q.status === QuotationStatus.SENT;
   const tx = (key: string, fb: string) => (t.has(key) ? t(key) : fb);
 
-  // Find when the customer last submitted (most recent CUSTOMER revision).
   const lastCustomerSubmit = [...q.revisions]
     .reverse()
     .find((r) => r.source === "CUSTOMER");
@@ -147,100 +145,132 @@ export default async function PortalQuotationDetailPage({
   );
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Link
-          href={`/${locale}/portal/quotations`}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <FileSignature className="h-5 w-5 text-muted-foreground" />
-        <h1 className="text-xl font-semibold tracking-tight">{q.number}</h1>
-        <StatusBadge
-          kind="quotation"
-          status={q.status}
-          label={
-            t.has(`quotations.status.${q.status}`)
-              ? t(`quotations.status.${q.status}`)
-              : q.status
-          }
-        />
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-4 lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {tx("quotations.portal.title", "Review your quotation")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <CustomerQuoteEditor
-                quotationId={q.id}
-                lines={editorLines}
-                currency={q.currency}
-                locale={locale}
-                editable={editable}
-                status={q.status}
-                submittedAt={
-                  lastCustomerSubmit
-                    ? lastCustomerSubmit.createdAt.toISOString()
-                    : null
-                }
-              />
-            </CardContent>
-          </Card>
-
-          {versions.length > 0 && (
-            <QuotationVersionsView versions={versions} locale={locale} />
-          )}
+    <QuotationRealtimeProvider quotationId={q.id} viewerRole="CUSTOMER">
+      <div className="space-y-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <Link
+              href={`/${locale}/portal/quotations`}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Link>
+            <FileSignature className="h-5 w-5 text-muted-foreground" />
+            <h1 className="text-xl font-semibold tracking-tight">{q.number}</h1>
+            <StatusBadge
+              kind="quotation"
+              status={q.status}
+              label={
+                t.has(`quotations.status.${q.status}`)
+                  ? t(`quotations.status.${q.status}`)
+                  : q.status
+              }
+            />
+          </div>
+          <QuotationHistoryButton versions={versions} locale={locale} />
         </div>
 
-        <div className="space-y-4 lg:col-span-1">
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {tx("quotations.portal.summary", "Summary")}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <Row
-                label={tx("quotations.subtotal", "Subtotal")}
-                value={formatCurrency(Number(q.subtotal), q.currency, locale)}
-              />
-              <Row
-                label={tx("quotations.discount", "Discount")}
-                value={formatCurrency(Number(q.discount), q.currency, locale)}
-              />
-              <Row
-                label={`${tx("quotations.taxAmount", "Tax")} (${Number(q.taxRate)}%)`}
-                value={formatCurrency(Number(q.taxAmount), q.currency, locale)}
-              />
-              <div className="my-2 border-t" />
-              <Row
-                label={tx("quotations.total", "Total")}
-                value={formatCurrency(Number(q.total), q.currency, locale)}
-                strong
-              />
-              {q.validUntil && (
-                <Row
-                  label={tx("quotations.validUntil", "Valid until")}
-                  value={formatDate(q.validUntil, locale)}
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="min-w-0 space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  {tx("quotations.portal.title", "Review your quotation")}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <CustomerQuoteEditor
+                  quotationId={q.id}
+                  lines={editorLines}
+                  currency={q.currency}
+                  locale={locale}
+                  editable={editable}
+                  status={q.status}
+                  submittedAt={
+                    lastCustomerSubmit
+                      ? lastCustomerSubmit.createdAt.toISOString()
+                      : null
+                  }
                 />
-              )}
-            </CardContent>
-          </Card>
+                <TotalsFooter
+                  subtotal={Number(q.subtotal)}
+                  discount={Number(q.discount)}
+                  taxAmount={Number(q.taxAmount)}
+                  taxRate={Number(q.taxRate)}
+                  total={Number(q.total)}
+                  validUntil={q.validUntil ? q.validUntil.toISOString() : null}
+                  currency={q.currency}
+                  locale={locale}
+                  labels={{
+                    subtotal: tx("quotations.subtotal", "Subtotal"),
+                    discount: tx("quotations.discount", "Discount"),
+                    tax: tx("quotations.taxAmount", "Tax"),
+                    total: tx("quotations.total", "Total"),
+                    validUntil: tx("quotations.validUntil", "Valid until"),
+                  }}
+                />
+              </CardContent>
+            </Card>
+          </div>
 
-          <QuotationChatPanel
-            quotationId={q.id}
-            messages={chatMessages}
-            viewerRole="CUSTOMER"
-            locale={locale}
-          />
+          <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pr-1">
+            <QuotationChatPanel
+              quotationId={q.id}
+              messages={chatMessages}
+              viewerRole="CUSTOMER"
+              locale={locale}
+            />
+          </aside>
         </div>
       </div>
+    </QuotationRealtimeProvider>
+  );
+}
+
+function TotalsFooter({
+  subtotal,
+  discount,
+  taxAmount,
+  taxRate,
+  total,
+  validUntil,
+  currency,
+  locale,
+  labels,
+}: {
+  subtotal: number;
+  discount: number;
+  taxAmount: number;
+  taxRate: number;
+  total: number;
+  validUntil: string | null;
+  currency: string;
+  locale: string;
+  labels: {
+    subtotal: string;
+    discount: string;
+    tax: string;
+    total: string;
+    validUntil: string;
+  };
+}) {
+  return (
+    <div className="ml-auto w-full max-w-sm space-y-1 border-t pt-3 text-sm font-mono">
+      <Row label={labels.subtotal} value={formatCurrency(subtotal, currency, locale)} />
+      <Row label={labels.discount} value={formatCurrency(discount, currency, locale)} />
+      <Row
+        label={`${labels.tax} (${taxRate}%)`}
+        value={formatCurrency(taxAmount, currency, locale)}
+      />
+      <div className="my-1 border-t" />
+      <Row
+        label={labels.total}
+        value={formatCurrency(total, currency, locale)}
+        strong
+      />
+      {validUntil && (
+        <Row label={labels.validUntil} value={formatDate(validUntil, locale)} />
+      )}
     </div>
   );
 }

@@ -19,6 +19,7 @@ import {
 } from "@/lib/quotations";
 import { sendEmail } from "@/lib/mail";
 import { Role } from "@/lib/enums";
+import { publishQuotationEvent } from "@/lib/quotation-events";
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -189,6 +190,11 @@ export async function addQuotationLine(
   });
 
   revalidatePath(`/quotations/${quotationId}`);
+  publishQuotationEvent(quotationId, {
+    type: "stateChange",
+    reason: "lineAdded",
+    recipientRoles: ["ADMIN", "CUSTOMER"],
+  });
   return { ok: true };
 }
 
@@ -231,6 +237,11 @@ export async function updateQuotationLine(
   });
 
   revalidatePath(`/quotations/${line.quotationId}`);
+  publishQuotationEvent(line.quotationId, {
+    type: "stateChange",
+    reason: "lineUpdated",
+    recipientRoles: ["ADMIN", "CUSTOMER"],
+  });
   return { ok: true };
 }
 
@@ -257,6 +268,11 @@ export async function deleteQuotationLine(lineId: string) {
   });
 
   revalidatePath(`/quotations/${line.quotationId}`);
+  publishQuotationEvent(line.quotationId, {
+    type: "stateChange",
+    reason: "lineRemoved",
+    recipientRoles: ["ADMIN", "CUSTOMER"],
+  });
   return { ok: true };
 }
 
@@ -281,6 +297,11 @@ export async function sendQuotation(id: string) {
   });
   revalidatePath(`/quotations/${id}`);
   revalidatePath("/quotations");
+  publishQuotationEvent(id, {
+    type: "stateChange",
+    reason: "sent",
+    recipientRoles: ["ADMIN", "CUSTOMER"],
+  });
   return { ok: true };
 }
 
@@ -310,6 +331,11 @@ export async function acceptQuotation(id: string) {
   });
   revalidatePath(`/quotations/${id}`);
   revalidatePath("/quotations");
+  publishQuotationEvent(id, {
+    type: "stateChange",
+    reason: "accepted",
+    recipientRoles: ["ADMIN", "CUSTOMER"],
+  });
   return { ok: true };
 }
 
@@ -340,6 +366,11 @@ export async function rejectQuotation(id: string, reason?: string) {
   });
   revalidatePath(`/quotations/${id}`);
   revalidatePath("/quotations");
+  publishQuotationEvent(id, {
+    type: "stateChange",
+    reason: "rejected",
+    recipientRoles: ["ADMIN", "CUSTOMER"],
+  });
   return { ok: true };
 }
 
@@ -365,6 +396,11 @@ export async function cancelQuotation(id: string) {
   });
   revalidatePath(`/quotations/${id}`);
   revalidatePath("/quotations");
+  publishQuotationEvent(id, {
+    type: "stateChange",
+    reason: "cancelled",
+    recipientRoles: ["ADMIN", "CUSTOMER"],
+  });
   return { ok: true };
 }
 
@@ -446,6 +482,11 @@ export async function convertQuotationToOrder(id: string) {
   revalidatePath(`/quotations/${q.id}`);
   revalidatePath("/quotations");
   revalidatePath("/orders");
+  publishQuotationEvent(q.id, {
+    type: "stateChange",
+    reason: "converted",
+    recipientRoles: ["ADMIN", "CUSTOMER"],
+  });
   return { ok: true, orderId };
 }
 
@@ -586,6 +627,11 @@ export async function sendQuotationEmail(input: {
 
   revalidatePath(`/quotations/${q.id}`);
   revalidatePath("/quotations");
+  publishQuotationEvent(q.id, {
+    type: "stateChange",
+    reason: "sent",
+    recipientRoles: ["ADMIN", "CUSTOMER"],
+  });
   return { ok: true };
 }
 
@@ -696,6 +742,11 @@ export async function submitCustomerProposal(
 
   revalidatePath(`/quotations/${q.id}`);
   revalidatePath(`/portal/quotations/${q.id}`);
+  publishQuotationEvent(q.id, {
+    type: "stateChange",
+    reason: everyAcceptedUnchanged ? "accepted" : "proposal",
+    recipientRoles: ["ADMIN", "CUSTOMER"],
+  });
   return { ok: true, status: everyAcceptedUnchanged ? "ACCEPTED" : "COUNTERED" };
 }
 
@@ -766,6 +817,11 @@ export async function acceptCustomerProposal(quotationId: string) {
 
   revalidatePath(`/quotations/${quotationId}`);
   revalidatePath("/quotations");
+  publishQuotationEvent(quotationId, {
+    type: "stateChange",
+    reason: "accepted",
+    recipientRoles: ["ADMIN", "CUSTOMER"],
+  });
   return { ok: true };
 }
 
@@ -845,6 +901,11 @@ export async function sendAdminCounter(input: {
 
   revalidatePath(`/quotations/${q.id}`);
   revalidatePath("/quotations");
+  publishQuotationEvent(q.id, {
+    type: "stateChange",
+    reason: "counter",
+    recipientRoles: ["ADMIN", "CUSTOMER"],
+  });
   return { ok: true };
 }
 
@@ -1011,18 +1072,23 @@ export async function postQuotationMessage(
   revalidatePath(`/quotations/${quote.id}`);
   revalidatePath(`/portal/quotations/${quote.id}`);
 
-  return {
-    ok: true,
-    message: {
-      id: created.id,
-      quotationId: created.quotationId,
-      lineId: created.lineId,
-      authorRole: created.authorRole as "ADMIN" | "CUSTOMER" | "SYSTEM",
-      authorName: created.author?.name ?? created.author?.email ?? null,
-      body: created.body,
-      createdAt: created.createdAt.toISOString(),
-    },
+  const dto: QuotationMessageDTO = {
+    id: created.id,
+    quotationId: created.quotationId,
+    lineId: created.lineId,
+    authorRole: created.authorRole as "ADMIN" | "CUSTOMER" | "SYSTEM",
+    authorName: created.author?.name ?? created.author?.email ?? null,
+    body: created.body,
+    createdAt: created.createdAt.toISOString(),
   };
+
+  publishQuotationEvent(quote.id, {
+    type: "message",
+    message: dto,
+    recipientRoles: ["ADMIN", "CUSTOMER"],
+  });
+
+  return { ok: true, message: dto };
 }
 
 /**
