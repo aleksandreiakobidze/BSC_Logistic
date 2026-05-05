@@ -4,14 +4,27 @@ import { setRequestLocale, getTranslations } from "next-intl/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { StatCard } from "@/components/app/stat-card";
 import { StatusBadge } from "@/components/app/status-badge";
 import { EmptyState } from "@/components/app/empty-state";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
-import { Package, Receipt } from "lucide-react";
+import { PageHeader } from "@/components/app/page-header";
+import { formatCurrency, formatDate } from "@/lib/utils";
+import { Package, Truck, Receipt, FileSignature, ArrowRight } from "lucide-react";
 
-export default async function MyPortalPage({ params }: { params: Promise<{ locale: string }> }) {
+export default async function PortalDashboardPage({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
   const { locale } = await params;
   setRequestLocale(locale);
   const session = await auth();
@@ -20,111 +33,316 @@ export default async function MyPortalPage({ params }: { params: Promise<{ local
     redirect(`/${locale}/overview`);
   }
   const t = await getTranslations();
+  const customerId = session.user.customerId!;
 
-  const [orders, invoices] = await Promise.all([
+  const orderIds = await prisma.order
+    .findMany({ where: { customerId }, select: { id: true } })
+    .then((rows) => rows.map((r) => r.id));
+
+  const [
+    activeOrderCount,
+    activeShipmentCount,
+    outstandingAgg,
+    openQuotationCount,
+    recentOrders,
+    upcomingInvoices,
+    activeShipments,
+  ] = await Promise.all([
+    prisma.order.count({
+      where: {
+        customerId,
+        status: { notIn: ["COMPLETED", "CANCELLED"] },
+      },
+    }),
+    prisma.shipment.count({
+      where: {
+        orderLinks: {
+          some: {
+            orderId: { in: orderIds.length ? orderIds : ["__none__"] },
+          },
+        },
+        status: { in: ["ASSIGNED", "PICKED_UP", "IN_TRANSIT"] },
+      },
+    }),
+    prisma.invoice.aggregate({
+      where: {
+        customerId,
+        status: { in: ["SENT", "PARTIAL", "OVERDUE"] },
+      },
+      _sum: { total: true, paid: true },
+    }),
+    prisma.quotation.count({
+      where: {
+        customerId,
+        status: { in: ["SENT", "COUNTERED"] },
+      },
+    }),
     prisma.order.findMany({
-      where: { customerId: session.user.customerId },
-      include: { shipments: true },
+      where: { customerId },
+      include: { shipmentLinks: { include: { shipment: true } } },
       orderBy: { createdAt: "desc" },
-      take: 20,
+      take: 5,
     }),
     prisma.invoice.findMany({
-      where: { customerId: session.user.customerId },
-      orderBy: { issueDate: "desc" },
-      take: 20,
+      where: {
+        customerId,
+        status: { in: ["SENT", "PARTIAL", "OVERDUE"] },
+      },
+      orderBy: { dueDate: "asc" },
+      take: 5,
+    }),
+    prisma.shipment.findMany({
+      where: {
+        orderLinks: {
+          some: {
+            orderId: { in: orderIds.length ? orderIds : ["__none__"] },
+          },
+        },
+        status: { in: ["ASSIGNED", "PICKED_UP", "IN_TRANSIT"] },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 5,
     }),
   ]);
 
+  const outstandingBalance = Math.max(
+    0,
+    Number(outstandingAgg._sum.total ?? 0) -
+      Number(outstandingAgg._sum.paid ?? 0),
+  );
+
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">{t("portal.myShipments")}</h1>
+      <PageHeader
+        title={t("portal.dash.title")}
+        description={
+          session.user.name
+            ? `${t("dashboard.welcome", { name: session.user.name })}`
+            : undefined
+        }
+      />
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2"><Package className="h-4 w-4" /> Orders</CardTitle>
-          <Button asChild variant="outline" size="sm"><Link href={`/${locale}/portal`}>Track shipment</Link></Button>
-        </CardHeader>
-        <CardContent className="p-0">
-          {orders.length === 0 ? (
-            <EmptyState title="No orders yet" description="Orders placed with us will appear here." />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Shipments</TableHead>
-                  <TableHead className="text-right">Price</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {orders.map((o) => (
-                  <TableRow key={o.id}>
-                    <TableCell className="font-mono">{o.number}</TableCell>
-                    <TableCell><StatusBadge status={o.status} kind="order" /></TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1.5">
-                        {o.shipments.map((s) => (
-                          <Link
-                            key={s.id}
-                            href={`/${locale}/portal/track/${s.trackingCode}`}
-                            className="rounded-full border px-2 py-0.5 text-xs font-mono hover:bg-accent"
-                          >
-                            {s.trackingCode}
-                          </Link>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {o.price ? formatCurrency(Number(o.price)) : "—"}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label={t("portal.dash.activeOrders")}
+          value={activeOrderCount.toString()}
+          icon={Package}
+          accent="primary"
+        />
+        <StatCard
+          label={t("portal.dash.activeShipments")}
+          value={activeShipmentCount.toString()}
+          icon={Truck}
+          accent="warning"
+        />
+        <StatCard
+          label={t("portal.dash.outstandingBalance")}
+          value={formatCurrency(outstandingBalance, "USD", locale)}
+          icon={Receipt}
+          accent={outstandingBalance > 0 ? "danger" : "success"}
+        />
+        <StatCard
+          label={t("portal.dash.openQuotations")}
+          value={openQuotationCount.toString()}
+          icon={FileSignature}
+          accent="success"
+        />
+      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2"><Receipt className="h-4 w-4" /> {t("portal.myInvoices")}</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {invoices.length === 0 ? (
-            <EmptyState title="No invoices" />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>#</TableHead>
-                  <TableHead>Issued</TableHead>
-                  <TableHead>Due</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">PDF</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {invoices.map((inv) => (
-                  <TableRow key={inv.id}>
-                    <TableCell className="font-mono">{inv.number}</TableCell>
-                    <TableCell>{formatDateTime(inv.issueDate)}</TableCell>
-                    <TableCell>{formatDateTime(inv.dueDate)}</TableCell>
-                    <TableCell><StatusBadge status={inv.status} kind="invoice" /></TableCell>
-                    <TableCell className="text-right">{formatCurrency(Number(inv.total))}</TableCell>
-                    <TableCell className="text-right">
-                      <Button asChild size="sm" variant="outline">
-                        <a href={`/api/invoices/${inv.id}/pdf`} target="_blank">Download</a>
-                      </Button>
-                    </TableCell>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Recent Orders */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Package className="h-4 w-4" />
+              {t("portal.dash.recentOrders")}
+            </CardTitle>
+            <Link
+              href={`/${locale}/portal/orders`}
+              className="flex items-center gap-1 text-sm text-primary hover:underline"
+            >
+              {t("portal.dash.viewAll")}{" "}
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          </CardHeader>
+          <CardContent className="p-0">
+            {recentOrders.length === 0 ? (
+              <EmptyState
+                title={t("portal.dash.noOrders")}
+                icon={Package}
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>#</TableHead>
+                    <TableHead>{t("common.status")}</TableHead>
+                    <TableHead>{t("shipments.title")}</TableHead>
+                    <TableHead className="text-right">
+                      {t("orders.price")}
+                    </TableHead>
+                    <TableHead>{t("common.date")}</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {recentOrders.map((o) => (
+                    <TableRow key={o.id}>
+                      <TableCell>
+                        <Link
+                          href={`/${locale}/portal/orders/${o.id}`}
+                          className="font-mono text-primary hover:underline"
+                        >
+                          {o.number}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={o.status} kind="order" />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1.5">
+                          {o.shipmentLinks.map((l) => (
+                            <Link
+                              key={l.shipment.id}
+                              href={`/${locale}/portal/track/${l.shipment.trackingCode}`}
+                              className="rounded-full border px-2 py-0.5 text-xs font-mono hover:bg-accent"
+                            >
+                              {l.shipment.trackingCode}
+                            </Link>
+                          ))}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {o.price
+                          ? formatCurrency(Number(o.price), o.currency, locale)
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(o.createdAt, locale)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Upcoming Invoices */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Receipt className="h-4 w-4" />
+              {t("portal.dash.upcomingInvoices")}
+            </CardTitle>
+            <Link
+              href={`/${locale}/portal/invoices`}
+              className="flex items-center gap-1 text-sm text-primary hover:underline"
+            >
+              {t("portal.dash.viewAll")}{" "}
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          </CardHeader>
+          <CardContent className="p-0">
+            {upcomingInvoices.length === 0 ? (
+              <EmptyState
+                title={t("portal.dash.noInvoices")}
+                icon={Receipt}
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>#</TableHead>
+                    <TableHead>{t("invoices.dueDate")}</TableHead>
+                    <TableHead>{t("common.status")}</TableHead>
+                    <TableHead className="text-right">
+                      {t("common.total")}
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {upcomingInvoices.map((inv) => (
+                    <TableRow key={inv.id}>
+                      <TableCell>
+                        <Link
+                          href={`/${locale}/portal/invoices/${inv.id}`}
+                          className="font-mono text-primary hover:underline"
+                        >
+                          {inv.number}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(inv.dueDate, locale)}
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={inv.status} kind="invoice" />
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {formatCurrency(Number(inv.total), inv.currency, locale)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Active Shipments */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Truck className="h-4 w-4" />
+              {t("portal.dash.activeShipmentsList")}
+            </CardTitle>
+            <Link
+              href={`/${locale}/portal/shipments`}
+              className="flex items-center gap-1 text-sm text-primary hover:underline"
+            >
+              {t("portal.dash.viewAll")}{" "}
+              <ArrowRight className="h-3 w-3" />
+            </Link>
+          </CardHeader>
+          <CardContent className="p-0">
+            {activeShipments.length === 0 ? (
+              <EmptyState
+                title={t("portal.dash.noShipments")}
+                icon={Truck}
+              />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>{t("shipments.tracking")}</TableHead>
+                    <TableHead>{t("common.status")}</TableHead>
+                    <TableHead>{t("common.date")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {activeShipments.map((s) => (
+                    <TableRow key={s.id}>
+                      <TableCell>
+                        <Link
+                          href={`/${locale}/portal/track/${s.trackingCode}`}
+                          className="font-mono text-primary hover:underline"
+                        >
+                          {s.trackingCode}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={s.status} kind="shipment" />
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(s.updatedAt, locale)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

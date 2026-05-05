@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { prisma } from "@/lib/db";
+import { auth } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/app/status-badge";
 import { formatDateTime } from "@/lib/utils";
@@ -14,17 +16,50 @@ export default async function TrackPage({
   const { locale, code } = await params;
   setRequestLocale(locale);
   const t = await getTranslations();
+  const session = await auth();
 
   const shipment = await prisma.shipment.findFirst({
     where: { trackingCode: code },
     include: {
       stops: { orderBy: { sequence: "asc" } },
       events: { orderBy: { at: "desc" }, take: 20 },
-      order: { select: { number: true, customer: { select: { name: true } } } },
+      orderLinks: {
+        orderBy: { sortOrder: "asc" },
+        include: {
+          order: {
+            select: {
+              id: true,
+              number: true,
+              customerId: true,
+              customer: { select: { name: true } },
+            },
+          },
+        },
+      },
     },
   });
 
   if (!shipment) return notFound();
+
+  // Privacy filter: signed-in customers see only their own orders.
+  // Anonymous viewers see only the tracking code, status, route — not order details.
+  const viewerCustomerId = session?.user?.customerId;
+  const isCustomer = session?.user?.role === "CUSTOMER";
+  const visibleOrders = !session
+    ? []
+    : isCustomer
+    ? shipment.orderLinks
+        .filter((l) => l.order.customerId === viewerCustomerId)
+        .map((l) => ({
+          id: l.order.id,
+          number: l.order.number,
+          customerName: l.order.customer.name,
+        }))
+    : shipment.orderLinks.map((l) => ({
+        id: l.order.id,
+        number: l.order.number,
+        customerName: l.order.customer.name,
+      }));
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -34,9 +69,27 @@ export default async function TrackPage({
           <h1 className="font-mono text-2xl font-semibold">{shipment.trackingCode}</h1>
           <StatusBadge status={shipment.status} kind="shipment" />
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Order <span className="font-mono">{shipment.order.number}</span> — {shipment.order.customer.name}
-        </p>
+        {visibleOrders.length > 0 && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+            <span>Order{visibleOrders.length > 1 ? "s" : ""}:</span>
+            {visibleOrders.map((o, i) => (
+              <span key={o.id}>
+                {isCustomer ? (
+                  <Link
+                    href={`/portal/orders/${o.id}`}
+                    className="font-mono hover:underline"
+                  >
+                    {o.number}
+                  </Link>
+                ) : (
+                  <span className="font-mono">{o.number}</span>
+                )}
+                <span className="text-xs"> — {o.customerName}</span>
+                {i < visibleOrders.length - 1 ? "," : ""}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       <Card>

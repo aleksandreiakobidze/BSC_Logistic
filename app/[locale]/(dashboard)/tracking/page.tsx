@@ -13,7 +13,10 @@ export default async function TrackingPage({ params }: { params: Promise<{ local
   const shipments = await prisma.shipment.findMany({
     where: { orgId, status: { in: ["ASSIGNED", "PICKED_UP", "IN_TRANSIT"] } },
     include: {
-      order: { include: { customer: true } },
+      orderLinks: {
+        orderBy: { sortOrder: "asc" },
+        include: { order: { select: { customer: { select: { name: true } } } } },
+      },
       driver: true,
       vehicle: true,
       stops: { orderBy: { sequence: "asc" } },
@@ -29,6 +32,15 @@ export default async function TrackingPage({ params }: { params: Promise<{ local
     const last = s.events[0];
     const pickup = s.stops[0];
     const dropoff = s.stops[s.stops.length - 1];
+    const customers = Array.from(
+      new Set(s.orderLinks.map((l) => l.order.customer.name)),
+    );
+    const customerLabel =
+      customers.length === 0
+        ? ""
+        : customers.length === 1
+        ? customers[0]
+        : `${customers[0]} +${customers.length - 1}`;
     const arr: {
       id: string;
       lat: number;
@@ -38,10 +50,10 @@ export default async function TrackingPage({ params }: { params: Promise<{ local
       shipmentNumber: string;
     }[] = [];
     if (pickup?.lat != null && pickup.lng != null) {
-      arr.push({ id: `${s.id}-p`, lat: pickup.lat, lng: pickup.lng, kind: "pickup", label: s.order.customer.name, shipmentNumber: s.number });
+      arr.push({ id: `${s.id}-p`, lat: pickup.lat, lng: pickup.lng, kind: "pickup", label: customerLabel, shipmentNumber: s.number });
     }
     if (dropoff?.lat != null && dropoff.lng != null) {
-      arr.push({ id: `${s.id}-d`, lat: dropoff.lat, lng: dropoff.lng, kind: "dropoff", label: s.order.customer.name, shipmentNumber: s.number });
+      arr.push({ id: `${s.id}-d`, lat: dropoff.lat, lng: dropoff.lng, kind: "dropoff", label: customerLabel, shipmentNumber: s.number });
     }
     if (last?.lat != null && last.lng != null) {
       arr.push({ id: `${s.id}-l`, lat: last.lat, lng: last.lng, kind: "live", label: s.driver ? `${s.driver.firstName} ${s.driver.lastName}` : "", shipmentNumber: s.number });

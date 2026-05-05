@@ -188,7 +188,11 @@ export default async function PortalQuotationDetailPage({
                   status={q.status}
                   submittedAt={
                     lastCustomerSubmit
-                      ? lastCustomerSubmit.createdAt.toISOString()
+                      ? new Intl.DateTimeFormat(locale, {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                          timeZone: "UTC",
+                        }).format(lastCustomerSubmit.createdAt)
                       : null
                   }
                 />

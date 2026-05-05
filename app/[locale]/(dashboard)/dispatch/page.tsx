@@ -11,11 +11,19 @@ export default async function DispatchPage({ params }: { params: Promise<{ local
   const t = await getTranslations();
   const { orgId } = await requireOrg();
 
-  const [shipments, drivers] = await Promise.all([
+  const [shipmentsRaw, drivers] = await Promise.all([
     prisma.shipment.findMany({
-      where: { orgId, status: { in: ["PLANNED", "ASSIGNED", "PICKED_UP", "IN_TRANSIT"] } },
+      where: {
+        orgId,
+        status: { in: ["PLANNED", "ASSIGNED", "PICKED_UP", "IN_TRANSIT"] },
+      },
       include: {
-        order: { include: { customer: true } },
+        orderLinks: {
+          orderBy: { sortOrder: "asc" },
+          include: {
+            order: { select: { customer: { select: { name: true } } } },
+          },
+        },
         driver: true,
         vehicle: true,
         stops: { orderBy: { sequence: "asc" }, take: 2 },
@@ -27,6 +35,28 @@ export default async function DispatchPage({ params }: { params: Promise<{ local
       orderBy: { firstName: "asc" },
     }),
   ]);
+
+  const shipments = shipmentsRaw.map((s) => {
+    const customers = Array.from(
+      new Set(s.orderLinks.map((l) => l.order.customer.name)),
+    );
+    const customerLine =
+      customers.length === 0
+        ? "—"
+        : customers.length === 1
+        ? customers[0]
+        : `${customers[0]} +${customers.length - 1}`;
+    return {
+      id: s.id,
+      number: s.number,
+      status: s.status,
+      driverId: s.driverId,
+      vehicle: s.vehicle ? { plate: s.vehicle.plate } : null,
+      orderCount: s.orderLinks.length,
+      customerLine,
+      stops: s.stops.map((st) => ({ city: st.city, address: st.address })),
+    };
+  });
 
   const unassigned = shipments.filter((s) => !s.driverId);
   const byDriver = new Map<string, typeof shipments>();

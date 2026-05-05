@@ -89,7 +89,11 @@ export default async function InvoicesPage({
       select: {
         id: true,
         number: true,
-        shipments: { select: { order: { select: { customerId: true } } } },
+        shipments: {
+          select: {
+            orderLinks: { select: { order: { select: { customerId: true } } } },
+          },
+        },
       },
       orderBy: { createdAt: "desc" },
       take: 200,
@@ -114,7 +118,13 @@ export default async function InvoicesPage({
   const tripOptions = tripsRaw.map((tr) => ({
     id: tr.id,
     number: tr.number,
-    customerIds: [...new Set(tr.shipments.map((s) => s.order.customerId))],
+    customerIds: [
+      ...new Set(
+        tr.shipments.flatMap((s) =>
+          s.orderLinks.map((l) => l.order.customerId),
+        ),
+      ),
+    ],
   }));
 
   return (

@@ -12,7 +12,30 @@ const nextConfig = {
   // Keep `@react-pdf/renderer` external so its reconciler is not mixed with
   // Next’s bundled server React (avoids production "React error #31"). Traced
   // into `.next/standalone/node_modules` by the standalone output.
-  serverExternalPackages: ["@react-pdf/renderer"],
+  // `applicationinsights` + the OpenTelemetry/gRPC tree it drags in must also
+  // stay external — otherwise webpack tries to bundle Node-only modules
+  // (`stream`, `tls`, `net`, …) that grpc-js requires and the build fails.
+  serverExternalPackages: [
+    "@react-pdf/renderer",
+    "applicationinsights",
+    "@azure/monitor-opentelemetry",
+    "@azure/monitor-opentelemetry-exporter",
+    "@opentelemetry/api",
+    "@opentelemetry/sdk-node",
+    "@opentelemetry/sdk-trace-base",
+    "@opentelemetry/sdk-trace-node",
+    "@opentelemetry/sdk-metrics",
+    "@opentelemetry/sdk-logs",
+    "@opentelemetry/exporter-trace-otlp-grpc",
+    "@opentelemetry/exporter-metrics-otlp-grpc",
+    "@opentelemetry/exporter-logs-otlp-grpc",
+    "@opentelemetry/otlp-grpc-exporter-base",
+    "@opentelemetry/otlp-exporter-base",
+    "@opentelemetry/instrumentation",
+    "@opentelemetry/instrumentation-http",
+    "@grpc/grpc-js",
+    "@grpc/proto-loader",
+  ],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "**" },

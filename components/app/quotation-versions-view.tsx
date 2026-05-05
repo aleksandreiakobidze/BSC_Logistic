@@ -225,7 +225,7 @@ function VersionHeader({
             </span>
           )}
         </div>
-        <div className="text-[11px] text-muted-foreground">
+        <div className="text-[11px] text-muted-foreground" suppressHydrationWarning>
           {version.createdAt ? formatDateTime(version.createdAt, locale) : "—"}
         </div>
         {version.message && (

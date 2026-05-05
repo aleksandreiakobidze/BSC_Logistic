@@ -34,7 +34,10 @@ export default async function DriverHomePage({ params }: { params: Promise<{ loc
       status: { in: ["ASSIGNED", "PICKED_UP", "IN_TRANSIT"] },
     },
     include: {
-      order: { include: { customer: true } },
+      orderLinks: {
+        orderBy: { sortOrder: "asc" },
+        include: { order: { select: { customer: { select: { name: true } } } } },
+      },
       stops: { orderBy: { sequence: "asc" } },
     },
     orderBy: { plannedStart: "asc" },
@@ -64,7 +67,11 @@ export default async function DriverHomePage({ params }: { params: Promise<{ loc
                       <div className="font-medium">{s.number}</div>
                       <StatusBadge kind="shipment" status={s.status} label={t(`shipments.status.${s.status}`)} />
                     </div>
-                    <div className="mt-1 text-sm text-muted-foreground">{s.order.customer.name}</div>
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {Array.from(
+                        new Set(s.orderLinks.map((l) => l.order.customer.name)),
+                      ).join(", ") || "—"}
+                    </div>
                     <div className="mt-3 space-y-1.5 text-sm">
                       <div className="flex items-start gap-2">
                         <MapPin className="mt-0.5 h-3.5 w-3.5 text-success" />

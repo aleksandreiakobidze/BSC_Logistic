@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
-import { presignUpload, s3 } from "@/lib/storage";
+import { getUploadUrl, isStorageConfigured } from "@/lib/storage";
 
 const schema = z.object({
   key: z.string().min(1),
@@ -15,10 +15,10 @@ export async function POST(req: Request) {
   const parsed = schema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: "Bad payload" }, { status: 400 });
 
-  if (!s3) {
+  if (!isStorageConfigured()) {
     return NextResponse.json({ mock: true, key: parsed.data.key });
   }
 
-  const url = await presignUpload(parsed.data.key, parsed.data.contentType);
+  const url = await getUploadUrl(parsed.data.key, parsed.data.contentType);
   return NextResponse.json({ url, key: parsed.data.key });
 }

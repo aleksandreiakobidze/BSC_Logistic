@@ -291,7 +291,7 @@ function ThreadItem({
           {time && (
             <>
               <span>·</span>
-              <span>{time}</span>
+              <span suppressHydrationWarning>{time}</span>
             </>
           )}
         </div>

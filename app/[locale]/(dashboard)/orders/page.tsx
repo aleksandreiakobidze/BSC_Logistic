@@ -48,7 +48,7 @@ export default async function OrdersPage({
         } : {}),
       },
       orderBy: { createdAt: "desc" },
-      include: { customer: true, _count: { select: { shipments: true } } },
+      include: { customer: true, _count: { select: { shipmentLinks: true } } },
       take: 200,
     }),
     prisma.customer.findMany({ where: { orgId }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -106,7 +106,7 @@ export default async function OrdersPage({
                     <TableCell>
                       <StatusBadge kind="order" status={o.status} label={t(`orders.status.${o.status}`)} />
                     </TableCell>
-                    <TableCell>{o._count.shipments}</TableCell>
+                    <TableCell>{o._count.shipmentLinks}</TableCell>
                     <TableCell className="text-right font-mono text-sm">
                       {formatCurrency(Number(o.price), o.currency, locale)}
                     </TableCell>

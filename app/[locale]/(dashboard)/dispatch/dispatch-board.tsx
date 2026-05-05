@@ -15,7 +15,8 @@ type Shipment = {
   status: string;
   driverId: string | null;
   vehicle: { plate: string } | null;
-  order: { customer: { name: string } };
+  customerLine: string;
+  orderCount: number;
   stops: { city: string | null; address: string }[];
 };
 
@@ -125,7 +126,15 @@ function ShipmentCard({ shipment, dragging }: { shipment: Shipment; dragging?: b
         <div className="text-sm font-medium">{shipment.number}</div>
         <StatusBadge kind="shipment" status={shipment.status as never} />
       </div>
-      <div className="mt-1 truncate text-xs text-muted-foreground">{shipment.order.customer.name}</div>
+      <div className="mt-1 flex items-center gap-1.5 truncate text-xs text-muted-foreground">
+        <User className="h-3 w-3" />
+        <span className="truncate">{shipment.customerLine}</span>
+        {shipment.orderCount > 1 && (
+          <span className="rounded bg-muted px-1 text-[10px] font-medium">
+            {shipment.orderCount} orders
+          </span>
+        )}
+      </div>
       <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
         <MapPin className="h-3 w-3" />
         <span className="truncate">

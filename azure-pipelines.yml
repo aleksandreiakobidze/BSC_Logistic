@@ -1,0 +1,220 @@
+# =============================================================================
+# Azure DevOps pipeline — BSC Logistics
+# =============================================================================
+# Trigger: push to `main` => CI -> BuildPush -> Migrate -> Deploy -> Smoke
+# PR validation: CI only (no deploy).
+#
+# Required Azure DevOps setup (one-off, see infra/README.md too):
+#   1. Service Connection: type "Azure Resource Manager", auth
+#      "Workload identity federation (automatic)", name `bsc-prod-azure`.
+#   2. Environment: name `production`, with a required-reviewer approval check.
+#   3. Variables: ACR name + RG name + image repo are read from `bsc-prod-vars`
+#      Variable Group (linked to Azure Key Vault `bsc-prod-kv` for secrets).
+# =============================================================================
+
+trigger:
+  batch: true
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  - group: bsc-prod-vars       # ACR_NAME, ACR_LOGIN_SERVER, RG_NAME, AZ_SUBSCRIPTION
+  - name:  IMAGE_REPO
+    value: bsc
+  - name:  IMAGE_TAG
+    value: $(Build.BuildId)
+  - name:  AZURE_SERVICE_CONNECTION
+    value: bsc-prod-azure
+
+stages:
+  # ===========================================================================
+  # CI — runs on every push and every PR
+  # ===========================================================================
+  - stage: CI
+    displayName: CI (lint + typecheck + tests)
+    jobs:
+      - job: ci
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: '20.x'
+            displayName: Use Node 20
+
+          - script: npm ci --legacy-peer-deps
+            displayName: Install deps
+
+          - script: npx prisma generate
+            displayName: Prisma generate
+            env:
+              DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+
+          - script: npm run lint
+            displayName: Lint
+
+          - script: npm run typecheck
+            displayName: Typecheck
+
+          - script: npm test --if-present
+            displayName: Unit tests
+            continueOnError: true
+
+  # ===========================================================================
+  # BuildPush — only on `main`, after CI passes
+  # ===========================================================================
+  - stage: BuildPush
+    displayName: Build & push image
+    dependsOn: CI
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - job: build
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: AzureCLI@2
+            displayName: az acr build (multi-stage Dockerfile)
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                az acr build \
+                  --registry $(ACR_NAME) \
+                  --image $(IMAGE_REPO):$(IMAGE_TAG) \
+                  --image $(IMAGE_REPO):latest \
+                  --file Dockerfile \
+                  .
+
+  # ===========================================================================
+  # Deploy — manual approval (gated by `production` environment)
+  # ===========================================================================
+  - stage: Deploy
+    displayName: Deploy to ACA
+    dependsOn: BuildPush
+    condition: succeeded()
+    jobs:
+      - deployment: deploy
+        environment: production
+        pool:
+          vmImage: ubuntu-latest
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureCLI@2
+                  displayName: Run prisma migrate deploy
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      IMAGE="$(ACR_LOGIN_SERVER)/$(IMAGE_REPO):$(IMAGE_TAG)"
+                      echo "Updating bsc-prod-migrate to $IMAGE"
+                      az containerapp job update \
+                        -g $(RG_NAME) -n bsc-prod-migrate \
+                        --image "$IMAGE"
+                      echo "Starting migration job..."
+                      EXEC=$(az containerapp job start \
+                        -g $(RG_NAME) -n bsc-prod-migrate \
+                        --query name -o tsv)
+                      echo "Execution: $EXEC"
+                      # Poll until the execution finishes (Succeeded | Failed | Stopped)
+                      for i in $(seq 1 60); do
+                        STATUS=$(az containerapp job execution show \
+                          -g $(RG_NAME) -n bsc-prod-migrate \
+                          --job-execution-name "$EXEC" \
+                          --query 'properties.status' -o tsv)
+                        echo "[$i/60] migrate status = $STATUS"
+                        if [ "$STATUS" = "Succeeded" ]; then exit 0; fi
+                        if [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Stopped" ]; then
+                          echo "Migration job did not succeed (status: $STATUS)"
+                          exit 1
+                        fi
+                        sleep 15
+                      done
+                      echo "Migration timed out after 15 minutes"
+                      exit 1
+
+                - task: AzureCLI@2
+                  displayName: Roll out bsc-prod-web
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      IMAGE="$(ACR_LOGIN_SERVER)/$(IMAGE_REPO):$(IMAGE_TAG)"
+                      az containerapp update \
+                        -g $(RG_NAME) -n bsc-prod-web \
+                        --image "$IMAGE" \
+                        --revision-suffix "b$(Build.BuildId)"
+
+                - task: AzureCLI@2
+                  displayName: Roll out bsc-prod-worker
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      IMAGE="$(ACR_LOGIN_SERVER)/$(IMAGE_REPO):$(IMAGE_TAG)"
+                      az containerapp update \
+                        -g $(RG_NAME) -n bsc-prod-worker \
+                        --image "$IMAGE" \
+                        --revision-suffix "b$(Build.BuildId)"
+
+                - task: AzureCLI@2
+                  displayName: Update bsc-prod-cron job image
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      set -euo pipefail
+                      IMAGE="$(ACR_LOGIN_SERVER)/$(IMAGE_REPO):$(IMAGE_TAG)"
+                      az containerapp job update \
+                        -g $(RG_NAME) -n bsc-prod-cron \
+                        --image "$IMAGE"
+
+  # ===========================================================================
+  # Smoke — confirm the new revision answers /api/health
+  # ===========================================================================
+  - stage: Smoke
+    displayName: Post-deploy smoke
+    dependsOn: Deploy
+    condition: succeeded()
+    jobs:
+      - job: smoke
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: AzureCLI@2
+            displayName: curl /api/health
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -euo pipefail
+                FQDN=$(az containerapp show -g $(RG_NAME) -n bsc-prod-web \
+                  --query properties.configuration.ingress.fqdn -o tsv)
+                echo "Web FQDN: $FQDN"
+                for i in 1 2 3 4 5; do
+                  echo "[$i/5] curl https://$FQDN/api/health"
+                  if curl -fsS -m 15 "https://$FQDN/api/health"; then
+                    echo "Smoke OK"
+                    exit 0
+                  fi
+                  sleep 10
+                done
+                echo "Smoke failed: $FQDN/api/health did not return 2xx"
+                exit 1

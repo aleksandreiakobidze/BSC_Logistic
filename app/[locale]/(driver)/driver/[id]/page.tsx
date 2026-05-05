@@ -26,7 +26,14 @@ export default async function DriverShipmentPage({
   const s = await prisma.shipment.findFirst({
     where: { id, driverId: driver.id },
     include: {
-      order: { include: { customer: true } },
+      orderLinks: {
+        orderBy: { sortOrder: "asc" },
+        include: {
+          order: {
+            select: { number: true, customer: { select: { name: true } } },
+          },
+        },
+      },
       stops: { orderBy: { sequence: "asc" } },
       events: { orderBy: { at: "desc" }, take: 10 },
       pods: true,
@@ -34,10 +41,16 @@ export default async function DriverShipmentPage({
   });
   if (!s) notFound();
 
+  const customers = Array.from(
+    new Set(s.orderLinks.map((l) => l.order.customer.name)),
+  );
+
   return (
     <div className="space-y-5">
       <div>
-        <div className="text-sm text-muted-foreground">{s.order.customer.name}</div>
+        <div className="text-sm text-muted-foreground">
+          {customers.join(", ") || "—"}
+        </div>
         <h1 className="text-2xl font-semibold tracking-tight">{s.number}</h1>
         <div className="mt-2">
           <StatusBadge kind="shipment" status={s.status} label={t(`shipments.status.${s.status}`)} />

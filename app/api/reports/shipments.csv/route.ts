@@ -9,7 +9,10 @@ export async function GET() {
   const shipments = await prisma.shipment.findMany({
     where: { orgId: session.user.orgId },
     include: {
-      order: { include: { customer: true } },
+      orderLinks: {
+        orderBy: { sortOrder: "asc" },
+        include: { order: { select: { customer: { select: { name: true } } } } },
+      },
       driver: true,
       vehicle: true,
       stops: { orderBy: { sequence: "asc" } },
@@ -39,7 +42,11 @@ export async function GET() {
     lines.push(
       [
         s.number,
-        JSON.stringify(s.order.customer.name),
+        JSON.stringify(
+          Array.from(
+            new Set(s.orderLinks.map((l) => l.order.customer.name)),
+          ).join("; "),
+        ),
         s.status,
         s.trackingCode,
         s.driver ? JSON.stringify(`${s.driver.firstName} ${s.driver.lastName}`) : "",

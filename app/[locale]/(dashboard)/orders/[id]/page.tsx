@@ -24,13 +24,17 @@ export default async function OrderDetailPage({
   const t = await getTranslations();
   const { orgId } = await requireOrg();
 
-  const order = await prisma.order.findFirst({
+  const orderRaw = await prisma.order.findFirst({
     where: { id, orgId },
     include: {
       customer: true,
-      shipments: {
-        include: { driver: true, vehicle: true, trip: true },
+      shipmentLinks: {
         orderBy: { createdAt: "desc" },
+        include: {
+          shipment: {
+            include: { driver: true, vehicle: true, trip: true },
+          },
+        },
       },
       expenses: { orderBy: { incurredAt: "desc" } },
       expenseAllocations: { include: { expense: true }, orderBy: { createdAt: "desc" } },
@@ -39,7 +43,11 @@ export default async function OrderDetailPage({
       sourceQuotation: { select: { id: true, number: true, status: true } },
     },
   });
-  if (!order) notFound();
+  if (!orderRaw) notFound();
+  const order = {
+    ...orderRaw,
+    shipments: orderRaw.shipmentLinks.map((l) => l.shipment),
+  };
 
   const pnl = await getOrderProfitability(order.id);
 

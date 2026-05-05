@@ -6,8 +6,7 @@ const intlMiddleware = createIntlMiddleware(routing);
 
 const PROTECTED = [
   /^\/(en|ka|ru)?\/?(overview|orders|shipments|dispatch|tracking|fleet|drivers|customers|warehouse|invoices|expenses|reports|settings|driver|quotations)(\/|$)/,
-  /^\/(en|ka|ru)?\/portal\/my(\/|$)/,
-  /^\/(en|ka|ru)?\/portal\/quotations(\/|$)/,
+  /^\/(en|ka|ru)?\/portal\/(my|orders|invoices|shipments|reports|profile|quotations)(\/|$)/,
 ];
 
 export default async function middleware(req: NextRequest) {

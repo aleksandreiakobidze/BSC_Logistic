@@ -335,11 +335,10 @@ async function createOrderRow(
   });
 
   // Mirror createOrder in orders/actions.ts: every imported order gets an
-  // initial Shipment + pickup/dropoff Stops + CREATED event.
+  // initial Shipment + pickup/dropoff Stops + CREATED event, linked via the join table.
   await prisma.shipment.create({
     data: {
       orgId,
-      orderId: order.id,
       number: generateNumber("SHP"),
       trackingCode: generateTrackingCode(),
       status: ShipmentStatus.PLANNED,
@@ -366,6 +365,7 @@ async function createOrderRow(
       events: {
         create: { type: "CREATED", note: "Order & shipment imported" },
       },
+      orderLinks: { create: { orderId: order.id, sortOrder: 0 } },
     },
   });
 

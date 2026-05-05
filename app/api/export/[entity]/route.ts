@@ -49,7 +49,10 @@ async function fetchRows(entity: Entity, orgId: string): Promise<SheetRow[]> {
         where: { orgId },
         orderBy: { createdAt: "desc" },
         include: {
-          order: { include: { customer: true } },
+          orderLinks: {
+            orderBy: { sortOrder: "asc" },
+            include: { order: { select: { number: true, customer: { select: { name: true } } } } },
+          },
           driver: true,
           vehicle: true,
           stops: { orderBy: { sequence: "asc" } },
@@ -58,7 +61,10 @@ async function fetchRows(entity: Entity, orgId: string): Promise<SheetRow[]> {
       return data.map((s) => ({
         Number: s.number,
         TrackingCode: s.trackingCode,
-        Customer: s.order.customer.name,
+        Customer: Array.from(
+          new Set(s.orderLinks.map((l) => l.order.customer.name)),
+        ).join(", "),
+        Orders: s.orderLinks.map((l) => l.order.number).join(", "),
         Status: s.status,
         Driver: s.driver
           ? `${s.driver.firstName} ${s.driver.lastName}`
@@ -84,7 +90,7 @@ async function fetchRows(entity: Entity, orgId: string): Promise<SheetRow[]> {
         orderBy: { createdAt: "desc" },
         include: {
           customer: true,
-          _count: { select: { shipments: true } },
+          _count: { select: { shipmentLinks: true } },
         },
       });
       return data.map((o) => ({
@@ -92,7 +98,7 @@ async function fetchRows(entity: Entity, orgId: string): Promise<SheetRow[]> {
         Customer: o.customer.name,
         Status: o.status,
         Reference: o.reference ?? "",
-        Shipments: o._count.shipments,
+        Shipments: o._count.shipmentLinks,
         Price: Number(o.price),
         Currency: o.currency,
         RequestedAt: o.requestedAt?.toISOString().slice(0, 10) ?? "",

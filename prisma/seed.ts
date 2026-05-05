@@ -486,7 +486,7 @@ async function main() {
   ];
 
   const createdOrders: { id: string; price: number; customerId: string; number: string; status: OrderStatus }[] = [];
-  const createdShipments: { id: string; orgId: string; orderId: string; status: ShipmentStatus; driverId: string | null; vehicleId: string | null }[] = [];
+  const createdShipments: { id: string; orgId: string; orderId: string; status: ShipmentStatus; driverId: string | null; vehicleId: string | null; cargoWeightKg: number | null; cargoVolumeM3: number | null; plannedDistanceKm: number | null }[] = [];
 
   for (let i = 0; i < 16; i++) {
     const customer = pick(customers, i);
@@ -527,7 +527,6 @@ async function main() {
     const shipment = await prisma.shipment.create({
       data: {
         orgId: org.id,
-        orderId: order.id,
         number: seq("SHP", i),
         trackingCode: generateTrackingCode(),
         status,
@@ -550,9 +549,20 @@ async function main() {
             : null,
         completedAt: status === ShipmentStatus.DELIVERED ? daysAgo(randInt(0, 1)) : status === ShipmentStatus.FAILED ? daysAgo(1) : null,
         notes: i % 6 === 0 ? "VIP customer — call 30 min before arrival" : null,
+        orderLinks: { create: { orderId: order.id, sortOrder: 0 } },
       },
     });
-    createdShipments.push({ id: shipment.id, orgId: shipment.orgId, orderId: shipment.orderId, status, driverId: shipment.driverId, vehicleId: shipment.vehicleId });
+    createdShipments.push({
+      id: shipment.id,
+      orgId: shipment.orgId,
+      orderId: order.id,
+      status,
+      driverId: shipment.driverId,
+      vehicleId: shipment.vehicleId,
+      cargoWeightKg: shipment.cargoWeightKg,
+      cargoVolumeM3: shipment.cargoVolumeM3,
+      plannedDistanceKm: shipment.plannedDistanceKm,
+    });
 
     await prisma.stop.createMany({
       data: [

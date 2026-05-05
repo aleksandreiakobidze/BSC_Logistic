@@ -23,3 +23,10 @@ design.bin
 
 # user-uploaded files (custom-field FILE inputs, org logos, etc.)
 public/uploads/
+
+# Local Azure deployment artifacts (never committed)
+acr-build*.log
+migrate-job.yaml
+migrate-logs.txt
+web-logs.txt
+worker-logs.txt

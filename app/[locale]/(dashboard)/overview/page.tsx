@@ -177,7 +177,10 @@ export default async function OverviewPage({
       orderBy: { createdAt: "desc" },
       take: 5,
       include: {
-        order: { include: { customer: true } },
+        orderLinks: {
+          orderBy: { sortOrder: "asc" },
+          include: { order: { select: { customer: { select: { name: true } } } } },
+        },
         driver: true,
         vehicle: true,
       },
@@ -645,7 +648,16 @@ export default async function OverviewPage({
               {recentShipments.map((s) => (
                 <tr key={s.id}>
                   <td className="num font-medium">{s.number}</td>
-                  <td>{s.order.customer.name}</td>
+                  <td>
+                    {(() => {
+                      const customers = Array.from(
+                        new Set(s.orderLinks.map((l) => l.order.customer.name)),
+                      );
+                      if (customers.length === 0) return "—";
+                      if (customers.length === 1) return customers[0];
+                      return `${customers[0]} +${customers.length - 1}`;
+                    })()}
+                  </td>
                   <td className="font-mono text-[11.5px] text-soft">
                     {s.trackingCode}
                   </td>

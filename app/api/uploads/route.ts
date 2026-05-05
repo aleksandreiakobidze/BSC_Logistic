@@ -3,12 +3,18 @@ import { writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import { auth } from "@/lib/auth";
+import { isStorageConfigured, uploadBuffer } from "@/lib/storage";
 
 /**
- * Simple multipart upload endpoint used by custom-field FILE inputs and the
- * invoice designer logo picker. Stores files under `public/uploads/<orgId>/`
- * so they're served back at the same path. For production, swap this body
- * for an S3 PUT (the presigned variant lives at `/api/uploads/presign`).
+ * Multipart upload endpoint used by custom-field FILE inputs and the invoice
+ * designer logo picker.
+ *
+ * - In production (Azure Blob configured) the file goes straight into the
+ *   `uploads` container under the key `org/<orgId>/<filename>`. The returned
+ *   `url` is a 7-day read SAS that the browser can use immediately.
+ * - In dev (no `AZURE_STORAGE_CONNECTION_STRING`), files fall back to
+ *   `public/uploads/<orgId>/<filename>` so the existing local workflow keeps
+ *   working without any cloud setup.
  */
 export async function POST(req: Request) {
   const session = await auth();
@@ -33,16 +39,31 @@ export async function POST(req: Request) {
     .slice(0, 60);
   const id = crypto.randomBytes(8).toString("hex");
   const filename = `${Date.now()}-${id}-${safeBase}${ext}`;
+  const bytes = Buffer.from(await file.arrayBuffer());
 
+  if (isStorageConfigured()) {
+    const key = `org/${orgId}/${filename}`;
+    const { url } = await uploadBuffer(key, bytes, file.type || undefined);
+    return NextResponse.json({
+      url,
+      key,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+    });
+  }
+
+  // Local dev fallback — ephemeral filesystem; do NOT rely on this in
+  // production (ACA replicas don't share disk).
   const dir = path.join(process.cwd(), "public", "uploads", orgId);
   await mkdir(dir, { recursive: true });
   const fullPath = path.join(dir, filename);
-  const bytes = Buffer.from(await file.arrayBuffer());
   await writeFile(fullPath, bytes);
 
-  const publicUrl = `/uploads/${orgId}/${filename}`;
+  const localUrl = `/uploads/${orgId}/${filename}`;
   return NextResponse.json({
-    url: publicUrl,
+    url: localUrl,
+    key: localUrl,
     name: file.name,
     size: file.size,
     type: file.type,

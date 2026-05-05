@@ -278,7 +278,7 @@ function MessageBubble({
             {message.authorName ?? message.authorRole}
           </span>
           <span>·</span>
-          <span>{time}</span>
+          <span suppressHydrationWarning>{time}</span>
         </div>
         <div className="whitespace-pre-wrap break-words text-sm">
           {message.body}

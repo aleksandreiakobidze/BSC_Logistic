@@ -156,12 +156,7 @@ export function CustomerQuoteEditor({
   }
 
   if (!editable) {
-    const dateFmt = submittedAt
-      ? new Intl.DateTimeFormat(locale, {
-          dateStyle: "medium",
-          timeStyle: "short",
-        }).format(new Date(submittedAt))
-      : null;
+    const dateFmt = submittedAt;
     return (
       <div className="space-y-4">
         <div

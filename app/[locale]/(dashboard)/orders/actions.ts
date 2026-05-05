@@ -51,11 +51,10 @@ export async function createOrder(formData: FormData) {
     formData,
   });
 
-  // Create an initial shipment with two stops
+  // Create an initial shipment with two stops, linked via the join table
   const shipment = await prisma.shipment.create({
     data: {
       orgId,
-      orderId: order.id,
       number: generateNumber("SHP"),
       trackingCode: generateTrackingCode(),
       status: ShipmentStatus.PLANNED,
@@ -80,6 +79,7 @@ export async function createOrder(formData: FormData) {
         ],
       },
       events: { create: { type: "CREATED", note: "Order & shipment created" } },
+      orderLinks: { create: { orderId: order.id, sortOrder: 0 } },
     },
   });
 

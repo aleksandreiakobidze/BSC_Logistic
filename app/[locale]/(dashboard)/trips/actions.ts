@@ -208,11 +208,12 @@ export async function allocateTripExpense(
         include: {
           shipments: {
             select: {
-              orderId: true,
               cargoWeightKg: true,
               cargoVolumeM3: true,
               plannedDistanceKm: true,
-              order: { select: { id: true, price: true } },
+              orderLinks: {
+                select: { order: { select: { id: true, price: true } } },
+              },
             },
           },
         },
@@ -222,20 +223,26 @@ export async function allocateTripExpense(
   if (!expense) throw new Error("Expense not found");
   if (!expense.tripId || !expense.trip) throw new Error("Expense is not trip-scoped");
 
-  // Aggregate per-order totals across the trip's shipments.
+  // Aggregate per-order totals across the trip's shipments — split shipment metrics
+  // proportionally across orders carried on each shipment.
   const byOrder = new Map<string, OrderForAllocation>();
   for (const s of expense.trip.shipments) {
-    const cur = byOrder.get(s.orderId) ?? {
-      orderId: s.orderId,
-      weightKg: 0,
-      volumeM3: 0,
-      distanceKm: 0,
-      revenue: Number(s.order.price ?? 0),
-    };
-    cur.weightKg = (cur.weightKg ?? 0) + Number(s.cargoWeightKg ?? 0);
-    cur.volumeM3 = (cur.volumeM3 ?? 0) + Number(s.cargoVolumeM3 ?? 0);
-    cur.distanceKm = (cur.distanceKm ?? 0) + Number(s.plannedDistanceKm ?? 0);
-    byOrder.set(s.orderId, cur);
+    const linkCount = Math.max(1, s.orderLinks.length);
+    for (const link of s.orderLinks) {
+      const o = link.order;
+      const cur = byOrder.get(o.id) ?? {
+        orderId: o.id,
+        weightKg: 0,
+        volumeM3: 0,
+        distanceKm: 0,
+        revenue: Number(o.price ?? 0),
+      };
+      cur.weightKg = (cur.weightKg ?? 0) + Number(s.cargoWeightKg ?? 0) / linkCount;
+      cur.volumeM3 = (cur.volumeM3 ?? 0) + Number(s.cargoVolumeM3 ?? 0) / linkCount;
+      cur.distanceKm =
+        (cur.distanceKm ?? 0) + Number(s.plannedDistanceKm ?? 0) / linkCount;
+      byOrder.set(o.id, cur);
+    }
   }
   const orders = [...byOrder.values()];
   if (orders.length === 0) throw new Error("Trip has no shipments to allocate to");

@@ -51,18 +51,24 @@ export async function getTripProfitability(tripId: string): Promise<PnL> {
   const trip = await prisma.trip.findUnique({
     where: { id: tripId },
     select: {
-      shipments: { select: { order: { select: { id: true, price: true } } } },
+      shipments: {
+        select: {
+          orderLinks: { select: { order: { select: { id: true, price: true } } } },
+        },
+      },
       expenses: { select: { amount: true } },
     },
   });
   if (!trip) return pnl(0, 0);
-  // Revenue = sum of distinct orders' prices on this trip.
+  // Revenue = sum of distinct orders' prices across all shipments on this trip.
   const seen = new Set<string>();
   let revenue = 0;
   for (const s of trip.shipments) {
-    if (!seen.has(s.order.id)) {
-      seen.add(s.order.id);
-      revenue += num(s.order.price);
+    for (const link of s.orderLinks) {
+      if (!seen.has(link.order.id)) {
+        seen.add(link.order.id);
+        revenue += num(link.order.price);
+      }
     }
   }
   const cost = trip.expenses.reduce((a, e) => a + num(e.amount), 0);
@@ -120,7 +126,11 @@ export async function getVehicleProfitability(
         : {}),
     },
     select: {
-      shipments: { select: { order: { select: { id: true, price: true } } } },
+      shipments: {
+        select: {
+          orderLinks: { select: { order: { select: { id: true, price: true } } } },
+        },
+      },
       expenses: { select: { amount: true } },
     },
   });
@@ -129,9 +139,11 @@ export async function getVehicleProfitability(
   for (const t of trips) {
     const seen = new Set<string>();
     for (const s of t.shipments) {
-      if (!seen.has(s.order.id)) {
-        seen.add(s.order.id);
-        revenue += num(s.order.price);
+      for (const link of s.orderLinks) {
+        if (!seen.has(link.order.id)) {
+          seen.add(link.order.id);
+          revenue += num(link.order.price);
+        }
       }
     }
     cost += t.expenses.reduce((a, e) => a + num(e.amount), 0);
@@ -173,7 +185,11 @@ export async function getDriverProfitability(
         : {}),
     },
     select: {
-      shipments: { select: { order: { select: { id: true, price: true } } } },
+      shipments: {
+        select: {
+          orderLinks: { select: { order: { select: { id: true, price: true } } } },
+        },
+      },
       expenses: { select: { amount: true } },
     },
   });
@@ -182,9 +198,11 @@ export async function getDriverProfitability(
   for (const t of trips) {
     const seen = new Set<string>();
     for (const s of t.shipments) {
-      if (!seen.has(s.order.id)) {
-        seen.add(s.order.id);
-        revenue += num(s.order.price);
+      for (const link of s.orderLinks) {
+        if (!seen.has(link.order.id)) {
+          seen.add(link.order.id);
+          revenue += num(link.order.price);
+        }
       }
     }
     cost += t.expenses.reduce((a, e) => a + num(e.amount), 0);

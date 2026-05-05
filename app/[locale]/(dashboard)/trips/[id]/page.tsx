@@ -32,7 +32,10 @@ export default async function TripDetailPage({
       vehicle: true,
       shipments: {
         include: {
-          order: { include: { customer: true } },
+          orderLinks: {
+            orderBy: { sortOrder: "asc" },
+            include: { order: { include: { customer: true } } },
+          },
         },
         orderBy: { createdAt: "asc" },
       },
@@ -49,10 +52,34 @@ export default async function TripDetailPage({
   // Available shipments (not on any trip yet, same org)
   const availableRaw = await prisma.shipment.findMany({
     where: { orgId, tripId: null },
-    include: { order: { include: { customer: true } } },
+    include: {
+      orderLinks: {
+        orderBy: { sortOrder: "asc" },
+        include: { order: { select: { number: true, customer: { select: { name: true } } } } },
+      },
+    },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
+
+  function summariseLinks(links: { order: { number: string; customer: { name: string } } }[]) {
+    const customers = Array.from(new Set(links.map((l) => l.order.customer.name)));
+    const orderNumbers = links.map((l) => l.order.number);
+    return {
+      customer:
+        customers.length === 0
+          ? "—"
+          : customers.length === 1
+          ? customers[0]
+          : `${customers[0]} +${customers.length - 1}`,
+      orderNumber:
+        orderNumbers.length === 0
+          ? "—"
+          : orderNumbers.length === 1
+          ? orderNumbers[0]
+          : `${orderNumbers[0]} +${orderNumbers.length - 1}`,
+    };
+  }
 
   const attached = trip.shipments.map((s) => ({
     id: s.id,
@@ -60,36 +87,39 @@ export default async function TripDetailPage({
     status: s.status,
     cargoType: s.cargoType,
     cargoWeightKg: s.cargoWeightKg,
-    customer: s.order.customer.name,
-    orderNumber: s.order.number,
+    ...summariseLinks(s.orderLinks),
   }));
 
   const available = availableRaw.map((s) => ({
     id: s.id,
     number: s.number,
-    customer: s.order.customer.name,
-    orderNumber: s.order.number,
+    ...summariseLinks(s.orderLinks),
   }));
 
-  // Build per-order data for allocation dialogs.
+  // Build per-order data for allocation dialogs (deduped across the join).
   const orderMap = new Map<
     string,
     { orderId: string; number: string; customerName: string; weightKg: number; volumeM3: number; distanceKm: number; revenue: number }
   >();
   for (const s of trip.shipments) {
-    const cur = orderMap.get(s.orderId) ?? {
-      orderId: s.orderId,
-      number: s.order.number,
-      customerName: s.order.customer.name,
-      weightKg: 0,
-      volumeM3: 0,
-      distanceKm: 0,
-      revenue: Number(s.order.price),
-    };
-    cur.weightKg += Number(s.cargoWeightKg ?? 0);
-    cur.volumeM3 += Number(s.cargoVolumeM3 ?? 0);
-    cur.distanceKm += Number(s.plannedDistanceKm ?? 0);
-    orderMap.set(s.orderId, cur);
+    // distribute shipment-level cargo proportionally across its orders
+    const linkCount = Math.max(1, s.orderLinks.length);
+    for (const link of s.orderLinks) {
+      const o = link.order;
+      const cur = orderMap.get(o.id) ?? {
+        orderId: o.id,
+        number: o.number,
+        customerName: o.customer.name,
+        weightKg: 0,
+        volumeM3: 0,
+        distanceKm: 0,
+        revenue: Number(o.price),
+      };
+      cur.weightKg += Number(s.cargoWeightKg ?? 0) / linkCount;
+      cur.volumeM3 += Number(s.cargoVolumeM3 ?? 0) / linkCount;
+      cur.distanceKm += Number(s.plannedDistanceKm ?? 0) / linkCount;
+      orderMap.set(o.id, cur);
+    }
   }
   const orders = [...orderMap.values()];
 

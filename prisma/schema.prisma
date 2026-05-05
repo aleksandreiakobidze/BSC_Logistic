@@ -1,16 +1,26 @@
 // BSC Logistics database schema
 //
-// SQLite provider: SQLite does not support native enums, @db.* column types,
-// or Json (Json works via Prisma since 4.x but is stored as TEXT). All enum
-// fields are therefore represented as `String` with literal defaults, and the
-// application-layer `lib/enums.ts` exposes const objects/types for ergonomics.
+// PostgreSQL provider. Money columns use @db.Decimal(14, 2), pay/tax rates
+// use @db.Decimal(8, 4), fractional quantities use @db.Decimal(14, 4). Enum
+// values are kept as `String` with literal defaults (mirroring the original
+// SQLite-friendly shim) so application code in `lib/enums.ts` continues to
+// work unchanged. JSON-bearing fields (linesJson, valueJson, optionsJson,
+// validationJson, invoiceTemplate, audit.meta, notification.meta,
+// shipmentEvent.meta) remain `String` for now to minimise the diff against
+// existing serialise/deserialise call sites; convert to `Json @db.JsonB`
+// when we start querying inside the JSON.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Targets:
+  //   native             -> developer machines (Windows/macOS/Linux glibc)
+  //   debian-openssl-3.0.x -> production runtime on CBL-Mariner / Debian
+  //   rhel-openssl-3.0.x -> belt-and-suspenders for any RHEL-family runtime
+  binaryTargets = ["native", "debian-openssl-3.0.x", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -19,36 +29,36 @@ datasource db {
 // ============================================================================
 
 model Organization {
-  id           String   @id @default(cuid())
-  name         String
-  slug         String   @unique
-  logoUrl      String?
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  logoUrl         String?
   baseCurrency    String   @default("USD")
   locale          String   @default("en")
   invoiceTemplate String?
   createdAt       DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  updatedAt       DateTime @updatedAt
 
-  branches   Branch[]
-  users      User[]
-  customers  Customer[]
-  vehicles   Vehicle[]
-  trailers   Trailer[]
-  drivers    Driver[]
-  orders     Order[]
-  shipments  Shipment[]
-  trips      Trip[]
-  invoices   Invoice[]
-  expenses   Expense[]
-  warehouses Warehouse[]
-  items      StockItem[]
-  documents  Document[]
-  auditLogs  AuditLog[]
-  leads      Lead[]
-  contacts   Contact[]
-  payments   Payment[]
-  settlements Settlement[]
-  quotations Quotation[]
+  branches               Branch[]
+  users                  User[]
+  customers              Customer[]
+  vehicles               Vehicle[]
+  trailers               Trailer[]
+  drivers                Driver[]
+  orders                 Order[]
+  shipments              Shipment[]
+  trips                  Trip[]
+  invoices               Invoice[]
+  expenses               Expense[]
+  warehouses             Warehouse[]
+  items                  StockItem[]
+  documents              Document[]
+  auditLogs              AuditLog[]
+  leads                  Lead[]
+  contacts               Contact[]
+  payments               Payment[]
+  settlements            Settlement[]
+  quotations             Quotation[]
   customFieldDefinitions CustomFieldDefinition[]
   customFieldValues      CustomFieldValue[]
   customFieldGroups      CustomFieldGroup[]
@@ -180,18 +190,18 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  organization   Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
-  branch         Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  customer       Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  driver         Driver?
-  sessions       Session[]
-  accounts       Account[]
-  invitations    Invitation[]    @relation("InvitedBy")
-  auditLogs      AuditLog[]
-  assignedLeads  Lead[]          @relation("AssignedLeads")
-  assignedLeadTasks LeadTask[]   @relation("AssignedLeadTasks")
-  createdPayments Payment[]      @relation("CreatedPayments")
-  ownedQuotations Quotation[]    @relation("OwnedQuotations")
+  organization               Organization?       @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  branch                     Branch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  customer                   Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  driver                     Driver?
+  sessions                   Session[]
+  accounts                   Account[]
+  invitations                Invitation[]        @relation("InvitedBy")
+  auditLogs                  AuditLog[]
+  assignedLeads              Lead[]              @relation("AssignedLeads")
+  assignedLeadTasks          LeadTask[]          @relation("AssignedLeadTasks")
+  createdPayments            Payment[]           @relation("CreatedPayments")
+  ownedQuotations            Quotation[]         @relation("OwnedQuotations")
   authoredQuotationRevisions QuotationRevision[] @relation("AuthoredQuotationRevisions")
   authoredQuotationMessages  QuotationMessage[]  @relation("AuthoredQuotationMessages")
 
@@ -266,8 +276,8 @@ model Customer {
   address          String?
   city             String?
   country          String?
-  creditLimit      Decimal   @default(0)
-  balance          Decimal   @default(0)
+  creditLimit      Decimal   @default(0) @db.Decimal(14, 2)
+  balance          Decimal   @default(0) @db.Decimal(14, 2)
   notes            String?
   firstActivatedAt DateTime?
   createdAt        DateTime  @default(now())
@@ -362,7 +372,7 @@ model Maintenance {
   vehicleId   String
   kind        String    @default("SCHEDULED")
   description String
-  cost        Decimal   @default(0)
+  cost        Decimal   @default(0) @db.Decimal(14, 2)
   odometerKm  Int?
   dueDate     DateTime?
   completedAt DateTime?
@@ -378,7 +388,7 @@ model FuelRecord {
   vehicleId  String
   driverId   String?
   liters     Float
-  cost       Decimal
+  cost       Decimal  @db.Decimal(14, 2)
   odometerKm Int?
   station    String?
   fueledAt   DateTime @default(now())
@@ -406,8 +416,8 @@ model Driver {
   dateOfBirth   DateTime?
   address       String?
   status        String    @default("AVAILABLE")
-  payRatePerKm  Decimal   @default(0)
-  payRateFlat   Decimal   @default(0)
+  payRatePerKm  Decimal   @default(0) @db.Decimal(8, 4)
+  payRateFlat   Decimal   @default(0) @db.Decimal(14, 2)
   hireDate      DateTime?
   notes         String?
   createdAt     DateTime  @default(now())
@@ -430,32 +440,32 @@ model Driver {
 // ============================================================================
 
 model Order {
-  id                 String    @id @default(cuid())
-  orgId              String
-  number             String
-  status             String    @default("QUOTE")
-  customerId         String
-  leadId             String?
-  sourceQuotationId  String?
-  reference          String?
-  price              Decimal   @default(0)
-  currency           String    @default("USD")
-  notes              String?
-  requestedAt        DateTime?
-  confirmedAt        DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  id                String    @id @default(cuid())
+  orgId             String
+  number            String
+  status            String    @default("QUOTE")
+  customerId        String
+  leadId            String?
+  sourceQuotationId String?
+  reference         String?
+  price             Decimal   @default(0) @db.Decimal(14, 2)
+  currency          String    @default("USD")
+  notes             String?
+  requestedAt       DateTime?
+  confirmedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  organization      Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  customer          Customer     @relation(fields: [customerId], references: [id])
-  lead              Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  sourceQuotation   Quotation?   @relation("QuotationConvertedOrders", fields: [sourceQuotationId], references: [id], onDelete: SetNull)
-  shipments         Shipment[]
-  invoices          Invoice[]
-  invoiceLines      InvoiceLine[]
-  expenses          Expense[]
+  organization       Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer           Customer            @relation(fields: [customerId], references: [id])
+  lead               Lead?               @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  sourceQuotation    Quotation?          @relation("QuotationConvertedOrders", fields: [sourceQuotationId], references: [id], onDelete: SetNull)
+  shipmentLinks      ShipmentOrder[]
+  invoices           Invoice[]
+  invoiceLines       InvoiceLine[]
+  expenses           Expense[]
   expenseAllocations ExpenseAllocation[]
-  lines             OrderLine[]
+  lines              OrderLine[]
 
   @@unique([orgId, number])
   @@index([status])
@@ -467,9 +477,9 @@ model OrderLine {
   id          String  @id @default(cuid())
   orderId     String
   description String
-  quantity    Decimal @default(1)
-  unitPrice   Decimal @default(0)
-  total       Decimal @default(0)
+  quantity    Decimal @default(1) @db.Decimal(14, 4)
+  unitPrice   Decimal @default(0) @db.Decimal(14, 2)
+  total       Decimal @default(0) @db.Decimal(14, 2)
   sortOrder   Int     @default(0)
 
   order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -480,7 +490,6 @@ model OrderLine {
 model Shipment {
   id                String    @id @default(cuid())
   orgId             String
-  orderId           String
   tripId            String?
   number            String
   trackingCode      String    @unique
@@ -502,7 +511,6 @@ model Shipment {
   updatedAt         DateTime  @updatedAt
 
   organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  order        Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   trip         Trip?           @relation(fields: [tripId], references: [id], onDelete: SetNull)
   driver       Driver?         @relation(fields: [driverId], references: [id], onDelete: SetNull)
   vehicle      Vehicle?        @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
@@ -510,11 +518,27 @@ model Shipment {
   events       ShipmentEvent[]
   pods         POD[]
   expenses     Expense[]
+  orderLinks   ShipmentOrder[]
 
   @@unique([orgId, number])
   @@index([status])
   @@index([driverId])
   @@index([tripId])
+}
+
+model ShipmentOrder {
+  id         String   @id @default(cuid())
+  shipmentId String
+  orderId    String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([shipmentId, orderId])
+  @@index([orderId])
+  @@index([shipmentId])
 }
 
 // ============================================================================
@@ -643,13 +667,13 @@ model StockItem {
   name        String
   description String?
   unit        String   @default("pcs")
-  unitPrice   Decimal  @default(0)
+  unitPrice   Decimal  @default(0) @db.Decimal(14, 2)
   currency    String   @default("USD")
-  taxRate     Decimal  @default(0)
+  taxRate     Decimal  @default(0) @db.Decimal(8, 4)
   weightKg    Float?
   notes       String?
   createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
 
   organization   Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
   movements      StockMovement[]
@@ -689,11 +713,11 @@ model Invoice {
   status     String   @default("DRAFT")
   issueDate  DateTime @default(now())
   dueDate    DateTime
-  subtotal   Decimal  @default(0)
-  taxRate    Decimal  @default(0)
-  taxAmount  Decimal  @default(0)
-  total      Decimal  @default(0)
-  paid       Decimal  @default(0)
+  subtotal   Decimal  @default(0) @db.Decimal(14, 2)
+  taxRate    Decimal  @default(0) @db.Decimal(8, 4)
+  taxAmount  Decimal  @default(0) @db.Decimal(14, 2)
+  total      Decimal  @default(0) @db.Decimal(14, 2)
+  paid       Decimal  @default(0) @db.Decimal(14, 2)
   currency   String   @default("USD")
   notes      String?
   createdAt  DateTime @default(now())
@@ -714,13 +738,13 @@ model InvoiceLine {
   invoiceId   String
   kind        String  @default("MANUAL") // ORDER | EXPENSE | TRIP | MANUAL
   description String
-  quantity    Decimal @default(1)
-  unitPrice   Decimal
-  total       Decimal
+  quantity    Decimal @default(1) @db.Decimal(14, 4)
+  unitPrice   Decimal @db.Decimal(14, 2)
+  total       Decimal @db.Decimal(14, 2)
 
   // Source references (optional, depending on kind)
-  orderId   String?
-  tripId    String?
+  orderId String?
+  tripId  String?
 
   invoice  Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   order    Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
@@ -733,15 +757,15 @@ model InvoiceLine {
 }
 
 model Payment {
-  id           String   @id @default(cuid())
-  orgId        String
-  kind         String   @default("RECEIVABLE") // RECEIVABLE | SETTLEMENT_PAYOUT
-  amount       Decimal
-  currency     String   @default("USD")
-  method       String   @default("BANK")
-  reference    String?
-  note         String?
-  paidAt       DateTime @default(now())
+  id        String   @id @default(cuid())
+  orgId     String
+  kind      String   @default("RECEIVABLE") // RECEIVABLE | SETTLEMENT_PAYOUT
+  amount    Decimal  @db.Decimal(14, 2)
+  currency  String   @default("USD")
+  method    String   @default("BANK")
+  reference String?
+  note      String?
+  paidAt    DateTime @default(now())
 
   invoiceId    String?
   customerId   String?
@@ -749,8 +773,8 @@ model Payment {
   driverId     String?
   createdById  String?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   invoice      Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
@@ -772,7 +796,7 @@ model Expense {
   orgId       String
   category    String
   description String
-  amount      Decimal
+  amount      Decimal  @db.Decimal(14, 2)
   currency    String   @default("USD")
   vendor      String?
   incurredAt  DateTime @default(now())
@@ -811,7 +835,7 @@ model ExpenseAllocation {
   id        String   @id @default(cuid())
   expenseId String
   orderId   String
-  amount    Decimal
+  amount    Decimal  @db.Decimal(14, 2)
   method    String // MANUAL | WEIGHT | VOLUME | DISTANCE | REVENUE | EQUAL
   createdAt DateTime @default(now())
 
@@ -829,9 +853,9 @@ model Settlement {
   periodFrom DateTime
   periodTo   DateTime
   totalKm    Float     @default(0)
-  gross      Decimal   @default(0)
-  deductions Decimal   @default(0)
-  net        Decimal   @default(0)
+  gross      Decimal   @default(0) @db.Decimal(14, 2)
+  deductions Decimal   @default(0) @db.Decimal(14, 2)
+  net        Decimal   @default(0) @db.Decimal(14, 2)
   currency   String    @default("USD")
   notes      String?
   paidAt     DateTime?
@@ -909,39 +933,39 @@ model Notification {
 // ============================================================================
 
 model Quotation {
-  id          String    @id @default(cuid())
-  orgId       String
-  number      String
-  status      String    @default("DRAFT") // DRAFT | SENT | ACCEPTED | REJECTED | EXPIRED | CONVERTED | CANCELLED
-  customerId  String
-  contactId   String?
-  leadId      String?
-  ownerId     String?
-  currency    String    @default("USD")
-  subtotal    Decimal   @default(0)
-  taxRate     Decimal   @default(0)
-  taxAmount   Decimal   @default(0)
-  discount    Decimal   @default(0)
-  total       Decimal   @default(0)
-  validUntil  DateTime?
-  notes       String?
+  id           String    @id @default(cuid())
+  orgId        String
+  number       String
+  status       String    @default("DRAFT") // DRAFT | SENT | ACCEPTED | REJECTED | EXPIRED | CONVERTED | CANCELLED
+  customerId   String
+  contactId    String?
+  leadId       String?
+  ownerId      String?
+  currency     String    @default("USD")
+  subtotal     Decimal   @default(0) @db.Decimal(14, 2)
+  taxRate      Decimal   @default(0) @db.Decimal(8, 4)
+  taxAmount    Decimal   @default(0) @db.Decimal(14, 2)
+  discount     Decimal   @default(0) @db.Decimal(14, 2)
+  total        Decimal   @default(0) @db.Decimal(14, 2)
+  validUntil   DateTime?
+  notes        String?
   rejectReason String?
-  sentAt      DateTime?
-  acceptedAt  DateTime?
-  rejectedAt  DateTime?
-  convertedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  sentAt       DateTime?
+  acceptedAt   DateTime?
+  rejectedAt   DateTime?
+  convertedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
-  organization     Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  customer         Customer            @relation(fields: [customerId], references: [id])
-  contact          Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  lead             Lead?               @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  owner            User?               @relation("OwnedQuotations", fields: [ownerId], references: [id], onDelete: SetNull)
-  lines            QuotationLine[]
-  revisions        QuotationRevision[]
-  messages         QuotationMessage[]
-  convertedOrders  Order[]             @relation("QuotationConvertedOrders")
+  organization    Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer        Customer            @relation(fields: [customerId], references: [id])
+  contact         Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  lead            Lead?               @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  owner           User?               @relation("OwnedQuotations", fields: [ownerId], references: [id], onDelete: SetNull)
+  lines           QuotationLine[]
+  revisions       QuotationRevision[]
+  messages        QuotationMessage[]
+  convertedOrders Order[]             @relation("QuotationConvertedOrders")
 
   @@unique([orgId, number])
   @@index([orgId, status])
@@ -955,9 +979,9 @@ model QuotationLine {
   quotationId String
   itemId      String?
   description String
-  quantity    Decimal @default(1)
-  unitPrice   Decimal @default(0)
-  total       Decimal @default(0)
+  quantity    Decimal @default(1) @db.Decimal(14, 4)
+  unitPrice   Decimal @default(0) @db.Decimal(14, 2)
+  total       Decimal @default(0) @db.Decimal(14, 2)
   sortOrder   Int     @default(0)
 
   /// Customer's most-recent response on this line, if any.
@@ -965,12 +989,12 @@ model QuotationLine {
   /// `MODIFIED` = customer counter-proposed (see proposed* fields).
   customerStatus      String?
   customerNote        String?
-  proposedQuantity    Decimal?
-  proposedUnitPrice   Decimal?
+  proposedQuantity    Decimal? @db.Decimal(14, 4)
+  proposedUnitPrice   Decimal? @db.Decimal(14, 2)
   proposedDescription String?
 
-  quotation Quotation  @relation(fields: [quotationId], references: [id], onDelete: Cascade)
-  item      StockItem? @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  quotation Quotation          @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  item      StockItem?         @relation(fields: [itemId], references: [id], onDelete: SetNull)
   messages  QuotationMessage[]
 
   @@index([quotationId])
@@ -984,15 +1008,15 @@ model QuotationRevision {
   id           String   @id @default(cuid())
   quotationId  String
   version      Int
-  source       String   // ADMIN | CUSTOMER
+  source       String // ADMIN | CUSTOMER
   authorUserId String?
   message      String?
   currency     String
-  subtotal     Decimal
-  taxRate      Decimal
-  taxAmount    Decimal
-  discount     Decimal
-  total        Decimal
+  subtotal     Decimal  @db.Decimal(14, 2)
+  taxRate      Decimal  @db.Decimal(8, 4)
+  taxAmount    Decimal  @db.Decimal(14, 2)
+  discount     Decimal  @db.Decimal(14, 2)
+  total        Decimal  @db.Decimal(14, 2)
   /// JSON snapshot of all lines at this revision. Each entry contains:
   /// { description, quantity, unitPrice, total, sortOrder, itemId, customerStatus,
   ///   customerNote, proposedQuantity, proposedUnitPrice, proposedDescription }
@@ -1015,7 +1039,7 @@ model QuotationMessage {
   quotationId    String
   lineId         String?
   authorUserId   String?
-  authorRole     String   // ADMIN | CUSTOMER | SYSTEM
+  authorRole     String // ADMIN | CUSTOMER | SYSTEM
   body           String
   createdAt      DateTime @default(now())
   readByCustomer Boolean  @default(false)
@@ -1044,7 +1068,7 @@ model Lead {
   source         String?
   assignedToId   String?
   contactId      String?
-  estimatedValue Decimal   @default(0)
+  estimatedValue Decimal   @default(0) @db.Decimal(14, 2)
   currency       String    @default("USD")
   score          Int       @default(0)
   priority       String    @default("MEDIUM")
