@@ -15,6 +15,14 @@ const isProd = process.env.NODE_ENV === "production";
 // build-time env stubs are placeholders.
 const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
 
+/** Treat empty strings as undefined so `.optional()` validators pass. */
+const emptyToUndefined = z.literal("").transform(() => undefined);
+
+/** Optional string that accepts empty-string env vars as "not set". */
+const optionalUrl = z.union([emptyToUndefined, z.string().url()]).optional();
+const optionalEmail = z.union([emptyToUndefined, z.string().email()]).optional();
+const optionalString = z.union([emptyToUndefined, z.string()]).optional();
+
 const required = (label: string) =>
   z
     .string({
@@ -34,39 +42,39 @@ const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   DATABASE_URL: databaseUrl,
   NEXTAUTH_SECRET: required("NEXTAUTH_SECRET"),
-  NEXTAUTH_URL: z.string().url().optional(),
-  NEXT_PUBLIC_APP_URL: z.string().url().optional(),
-  MAIL_FROM: z.string().email().optional(),
+  NEXTAUTH_URL: optionalUrl,
+  NEXT_PUBLIC_APP_URL: optionalUrl,
+  MAIL_FROM: optionalEmail,
 
   // Background fan-out (required for multi-replica SSE; falls back to
   // EventEmitter when absent so dev still works).
-  REDIS_URL: z.string().optional(),
+  REDIS_URL: optionalString,
 
   // Storage (required in prod for uploads; dev can fall back to disk).
-  AZURE_STORAGE_CONNECTION_STRING: z.string().optional(),
-  AZURE_STORAGE_CONTAINER: z.string().optional().default("uploads"),
-  AZURE_STORAGE_PUBLIC_URL: z.string().url().optional(),
+  AZURE_STORAGE_CONNECTION_STRING: optionalString,
+  AZURE_STORAGE_CONTAINER: z.union([emptyToUndefined, z.string()]).optional().default("uploads"),
+  AZURE_STORAGE_PUBLIC_URL: optionalUrl,
 
   // Email (Resend preferred, SMTP fallback).
-  RESEND_API_KEY: z.string().optional(),
-  SMTP_HOST: z.string().optional(),
-  SMTP_PORT: z.string().optional(),
-  SMTP_USER: z.string().optional(),
-  SMTP_PASS: z.string().optional(),
+  RESEND_API_KEY: optionalString,
+  SMTP_HOST: optionalString,
+  SMTP_PORT: optionalString,
+  SMTP_USER: optionalString,
+  SMTP_PASS: optionalString,
 
   // SMS
-  TWILIO_ACCOUNT_SID: z.string().optional(),
-  TWILIO_AUTH_TOKEN: z.string().optional(),
-  TWILIO_FROM_NUMBER: z.string().optional(),
+  TWILIO_ACCOUNT_SID: optionalString,
+  TWILIO_AUTH_TOKEN: optionalString,
+  TWILIO_FROM_NUMBER: optionalString,
 
   // Public client config
-  NEXT_PUBLIC_MAPBOX_TOKEN: z.string().optional(),
+  NEXT_PUBLIC_MAPBOX_TOKEN: optionalString,
 
   // Observability
-  APPLICATIONINSIGHTS_CONNECTION_STRING: z.string().optional(),
+  APPLICATIONINSIGHTS_CONNECTION_STRING: optionalString,
 
   // Inbound quote-request mailbox
-  QUOTE_INBOX: z.string().email().optional(),
+  QUOTE_INBOX: optionalEmail,
 });
 
 export type Env = z.infer<typeof schema>;
