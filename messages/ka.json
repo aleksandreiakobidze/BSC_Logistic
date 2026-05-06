@@ -229,7 +229,9 @@
       "resetPassword": "პაროლის განახლება",
       "resetToast": "პაროლი განახლდა",
       "save": "შენახვა",
-      "lastLogin": "ბოლო შესვლა"
+      "lastLogin": "ბოლო შესვლა",
+      "editEmail": "რედაქტირება",
+      "emailUpdatedToast": "შესვლის ელფოსტა განახლდა"
     }
   },
   "invoices": {

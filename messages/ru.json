@@ -229,7 +229,9 @@
       "resetPassword": "Сбросить пароль",
       "resetToast": "Пароль обновлён",
       "save": "Сохранить",
-      "lastLogin": "Последний вход"
+      "lastLogin": "Последний вход",
+      "editEmail": "Изменить",
+      "emailUpdatedToast": "Эл. почта для входа обновлена"
     }
   },
   "invoices": {

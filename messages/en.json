@@ -229,7 +229,9 @@
       "resetPassword": "Reset password",
       "resetToast": "Password updated",
       "save": "Save",
-      "lastLogin": "Last login"
+      "lastLogin": "Last login",
+      "editEmail": "Edit",
+      "emailUpdatedToast": "Login email updated"
     }
   },
   "invoices": {

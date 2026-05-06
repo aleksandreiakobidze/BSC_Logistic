@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { Loader2, KeyRound, ShieldCheck, UserPlus } from "lucide-react";
+import { Loader2, KeyRound, ShieldCheck, UserPlus, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import {
   createCustomerPortalUser,
   resetCustomerPortalPassword,
+  updateCustomerPortalEmail,
 } from "../portal-actions";
 
 export type PortalUserSummary = {
@@ -35,6 +36,7 @@ export function PortalAccessCard({
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
   const [reset, setReset] = React.useState(false);
+  const [editEmail, setEditEmail] = React.useState(false);
 
   function k(key: string, fallback: string): string {
     try {
@@ -61,6 +63,29 @@ export function PortalAccessCard({
       });
       toast.success(k("createdToast", "Portal access created"));
       form.reset();
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onUpdateEmail(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!portalUser) return;
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    const email = String(fd.get("email") ?? "").trim();
+    if (!email || email === portalUser.email) {
+      setEditEmail(false);
+      return;
+    }
+    setBusy(true);
+    try {
+      await updateCustomerPortalEmail({ userId: portalUser.id, email });
+      toast.success(k("emailUpdatedToast", "Login email updated"));
+      setEditEmail(false);
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error");
@@ -101,11 +126,62 @@ export function PortalAccessCard({
         {portalUser ? (
           <>
             <div className="rounded-md border bg-muted/30 px-3 py-2">
-              <div className="text-xs uppercase tracking-wide text-muted-foreground">
-                {k("loginEmail", "Login email")}
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                  {k("loginEmail", "Login email")}
+                </div>
+                {!editEmail && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 gap-1 px-2 text-xs"
+                    onClick={() => setEditEmail(true)}
+                  >
+                    <Pencil className="h-3 w-3" />
+                    {k("editEmail", "Edit")}
+                  </Button>
+                )}
               </div>
-              <div className="font-mono text-sm break-all">{portalUser.email}</div>
-              {portalUser.lastLoginAt && (
+              {!editEmail ? (
+                <div className="font-mono text-sm break-all">
+                  {portalUser.email}
+                </div>
+              ) : (
+                <form onSubmit={onUpdateEmail} className="mt-1 space-y-2">
+                  <Input
+                    name="email"
+                    type="email"
+                    required
+                    defaultValue={portalUser.email}
+                    autoComplete="off"
+                    className="h-8 text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="flex-1"
+                      onClick={() => setEditEmail(false)}
+                    >
+                      {t("common.cancel")}
+                    </Button>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      className="flex-1"
+                      disabled={busy}
+                    >
+                      {busy ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      {k("save", "Save")}
+                    </Button>
+                  </div>
+                </form>
+              )}
+              {portalUser.lastLoginAt && !editEmail && (
                 <div className="mt-1 text-[11px] text-muted-foreground">
                   {k("lastLogin", "Last login")}:{" "}
                   {new Date(portalUser.lastLoginAt).toLocaleString()}
