@@ -80,6 +80,13 @@ export const navGroups: NavGroup[] = [
         icon: FileSignature,
         roles: ["ADMIN", "DISPATCHER"],
       },
+      {
+        href: "/suppliers",
+        labelKey: "nav.suppliers",
+        icon: Truck,
+        roles: ["ADMIN", "DISPATCHER"],
+      },
+      { href: "/items", labelKey: "nav.items", icon: Package },
       { href: "/warehouse", labelKey: "nav.warehouse", icon: Warehouse },
     ],
   },

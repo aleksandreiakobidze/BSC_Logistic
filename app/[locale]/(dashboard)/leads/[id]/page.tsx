@@ -8,6 +8,7 @@ import {
   Phone,
   Calendar,
   Package,
+  Trophy,
   UserCircle2,
 } from "lucide-react";
 import { prisma } from "@/lib/db";
@@ -23,11 +24,13 @@ import {
 } from "@/components/app/lead-priority-badge";
 import { EditLeadForm } from "./edit-lead-form";
 import { ActivityTimeline } from "./activity-timeline";
-import { QualificationWizard } from "./qualification-wizard";
+import { LeadStatusTransition } from "./components/lead-status-transition";
+import { LeadQuotationsCard } from "./components/lead-quotations-card";
 import { LeadTasks } from "./lead-tasks";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { CustomFieldsDisplay } from "@/components/app/custom-fields/custom-fields-display";
 import { CustomFieldEntity } from "@/lib/custom-fields";
+import { LeadStatus } from "@/lib/enums";
 import {
   getCustomFieldDefinitions,
   getCustomFieldValues,
@@ -64,6 +67,18 @@ export default async function LeadDetailPage({
         },
         tasks: { orderBy: [{ completedAt: "asc" }, { dueAt: "asc" }] },
         orders: { select: { id: true, number: true, status: true, price: true } },
+        quotations: {
+          orderBy: { createdAt: "desc" },
+          select: {
+            id: true,
+            number: true,
+            status: true,
+            total: true,
+            currency: true,
+            validUntil: true,
+            createdAt: true,
+          },
+        },
       },
     }),
     prisma.user.findMany({
@@ -81,7 +96,7 @@ export default async function LeadDetailPage({
     <div className="space-y-6">
       <PageHeader
         title={
-          <span className="flex items-center gap-3">
+          <span className="flex flex-wrap items-center gap-3">
             <Link
               href="/leads"
               className="text-muted-foreground hover:text-foreground"
@@ -90,46 +105,54 @@ export default async function LeadDetailPage({
             </Link>
             {lead.name}
             <LeadStatusBadge status={lead.status} />
+            {lead.wonAt && (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                <Trophy className="h-3 w-3" />
+                {t("leads.wonAt")}
+              </span>
+            )}
             <LeadPriorityBadge priority={lead.priority} />
             <LeadScoreChip score={lead.score} />
           </span>
         }
         description={lead.company ?? undefined}
         actions={
-          <div className="flex gap-2">
-            {lead.customer ? (
+          <div className="flex flex-wrap items-center gap-2">
+            {lead.customer && (
               <Button variant="outline" size="sm" asChild>
                 <Link href={`/customers/${lead.customer.id}`}>
                   <Building2 className="mr-2 h-4 w-4" />
                   {lead.customer.name}
                 </Link>
               </Button>
-            ) : (
-              lead.status !== "LOST" && (
-                <QualificationWizard
-                  lead={{
-                    id: lead.id,
-                    name: lead.name,
-                    email: lead.email ?? null,
-                    phone: lead.phone ?? null,
-                    company: lead.company ?? null,
-                    notes: lead.notes ?? null,
-                    estimatedValue: Number(lead.estimatedValue),
-                    currency: lead.currency,
-                    contact: lead.contact
-                      ? {
-                          id: lead.contact.id,
-                          name: lead.contact.name,
-                          email: lead.contact.email,
-                          phone: lead.contact.phone,
-                          company: lead.contact.company,
-                        }
-                      : null,
-                    customer: null,
-                  }}
-                />
-              )
             )}
+            <LeadStatusTransition
+              lead={{
+                id: lead.id,
+                name: lead.name,
+                email: lead.email,
+                phone: lead.phone,
+                company: lead.company,
+                notes: lead.notes,
+                estimatedValue: Number(lead.estimatedValue),
+                currency: lead.currency,
+                status: lead.status,
+                contactId: lead.contactId,
+                customerId: lead.customerId,
+                contact: lead.contact
+                  ? {
+                      id: lead.contact.id,
+                      name: lead.contact.name,
+                      email: lead.contact.email,
+                      phone: lead.contact.phone,
+                      company: lead.contact.company,
+                    }
+                  : null,
+                customer: lead.customer
+                  ? { id: lead.customer.id, name: lead.customer.name }
+                  : null,
+              }}
+            />
           </div>
         }
       />
@@ -240,6 +263,14 @@ export default async function LeadDetailPage({
                   <span>{formatDate(lead.convertedAt, locale)}</span>
                 </div>
               )}
+              {lead.wonAt && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">
+                    {t("leads.wonAt")}
+                  </span>
+                  <span>{formatDate(lead.wonAt, locale)}</span>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -293,6 +324,23 @@ export default async function LeadDetailPage({
 
         {/* Right — edit form + activity */}
         <div className="space-y-6 lg:col-span-2">
+          {lead.status === LeadStatus.QUALIFIED && (
+            <LeadQuotationsCard
+              leadId={lead.id}
+              quotations={lead.quotations.map((q) => ({
+                id: q.id,
+                number: q.number,
+                status: q.status,
+                total: Number(q.total),
+                currency: q.currency,
+                validUntil: q.validUntil,
+                createdAt: q.createdAt,
+              }))}
+              locale={locale}
+              canCreate={!!lead.customerId && !!lead.contactId}
+            />
+          )}
+
           <Card>
             <CardHeader>
               <CardTitle className="text-sm font-medium">

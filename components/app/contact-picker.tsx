@@ -110,12 +110,21 @@ export function ContactPicker({
     }
     setCreating(true);
     try {
-      const created = await createContactQuick({
+      const res = await createContactQuick({
         name,
         email: String(fd.get("email") ?? "") || null,
         phone: String(fd.get("phone") ?? "") || null,
         company: String(fd.get("company") ?? "") || null,
       });
+      if (!res.ok) {
+        const key =
+          res.error === "PHONE_OR_EMAIL_REQUIRED"
+            ? "leads.transition.errors.CONTACT_INVALID_PHONE_OR_EMAIL"
+            : "common.error";
+        toast.error(t(key));
+        return;
+      }
+      const created = res.contact;
       cacheRef.current.set(created.id, created);
       setOptions((prev) => [
         {

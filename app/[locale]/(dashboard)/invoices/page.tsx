@@ -182,6 +182,9 @@ export default async function InvoicesPage({
                   <TableHead>{t("common.status")}</TableHead>
                   <TableHead className="text-right">{t("invoices.total")}</TableHead>
                   <TableHead className="text-right">{t("invoices.balanceDue")}</TableHead>
+                  <TableHead className="text-xs text-muted-foreground">
+                    {t("common.created")}
+                  </TableHead>
                   <TableHead className="text-right">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -214,6 +217,9 @@ export default async function InvoicesPage({
                         <span className={balanceDue > 0 ? "text-foreground" : "text-muted-foreground"}>
                           {formatCurrency(balanceDue, inv.currency, locale)}
                         </span>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {formatDate(inv.createdAt, locale)}
                       </TableCell>
                       <TableCell className="text-right">
                         <InvoiceRowActions

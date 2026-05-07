@@ -1,17 +1,23 @@
+import Link from "next/link";
 import { setRequestLocale, getTranslations } from "next-intl/server";
 import { Warehouse as WarehouseIcon } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireOrg } from "@/lib/actions";
 import { PageHeader } from "@/components/app/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/app/empty-state";
 import { formatDateTime } from "@/lib/utils";
 import { ListFilters } from "@/components/app/list-filters";
 import { MovementKind } from "@/lib/enums";
-import { ItemDialog } from "./item-dialog";
-import { formatCurrency } from "@/lib/utils";
 
 const MOVEMENT_OPTIONS = Object.values(MovementKind).map((k) => ({ label: k, value: k }));
 
@@ -31,22 +37,12 @@ export default async function WarehousePage({
   const q = sp?.q?.trim() ?? "";
   const movementKind = sp?.kind ?? "";
 
-  const [warehouses, items, movements] = await Promise.all([
+  // Items / catalog management lives entirely at /items now. Warehouse only
+  // shows physical locations and their stock movements.
+  const [warehouses, movements] = await Promise.all([
     prisma.warehouse.findMany({
       where: { orgId },
       include: { _count: { select: { bins: true } } },
-    }),
-    prisma.stockItem.findMany({
-      where: {
-        orgId,
-        ...(q ? {
-          OR: [
-            { sku: { contains: q } },
-            { name: { contains: q } },
-          ],
-        } : {}),
-      },
-      include: { movements: true },
     }),
     prisma.stockMovement.findMany({
       where: {
@@ -66,22 +62,12 @@ export default async function WarehousePage({
     }),
   ]);
 
-  const itemsWithStock = items.map((item) => {
-    const qty = item.movements.reduce((acc, m) => {
-      if (m.kind === "INBOUND") return acc + Number(m.quantity);
-      if (m.kind === "OUTBOUND") return acc - Number(m.quantity);
-      if (m.kind === "ADJUSTMENT") return acc + Number(m.quantity);
-      return acc;
-    }, 0);
-    return { ...item, stock: qty };
-  });
-
   return (
     <div className="space-y-6">
-      <PageHeader title={t("warehouse.title")} actions={<ItemDialog />} />
+      <PageHeader title={t("warehouse.title")} />
 
       <ListFilters
-        searchPlaceholder="Search SKU or item name…"
+        searchPlaceholder="Search SKU or warehouse name…"
         filters={[
           { key: "kind", label: "Movement", type: "select", options: MOVEMENT_OPTIONS },
         ]}
@@ -116,95 +102,54 @@ export default async function WarehousePage({
             ))}
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
-              <CardHeader><CardTitle>{t("warehouse.items")}</CardTitle></CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>{t("warehouse.sku")}</TableHead>
-                      <TableHead>{t("common.name")}</TableHead>
-                      <TableHead className="text-right">Price</TableHead>
-                      <TableHead className="text-right">Stock</TableHead>
-                      <TableHead />
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("warehouse.movements")}</CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>When</TableHead>
+                    <TableHead>{t("warehouse.sku")}</TableHead>
+                    <TableHead>Warehouse</TableHead>
+                    <TableHead>Kind</TableHead>
+                    <TableHead className="text-right">{t("warehouse.quantity")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {movements.map((m) => (
+                    <TableRow key={m.id}>
+                      <TableCell className="text-xs">{formatDateTime(m.at, locale)}</TableCell>
+                      <TableCell className="font-mono text-xs">
+                        <Link
+                          href={`/items/${m.item.id}`}
+                          className="text-primary hover:underline"
+                        >
+                          {m.item.sku}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-sm">{m.warehouse.name}</TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            m.kind === "INBOUND"
+                              ? "success"
+                              : m.kind === "OUTBOUND"
+                                ? "warning"
+                                : "muted"
+                          }
+                        >
+                          {m.kind}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono">{Number(m.quantity)}</TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {itemsWithStock.map((i) => (
-                      <TableRow key={i.id}>
-                        <TableCell className="font-mono text-xs">{i.sku}</TableCell>
-                        <TableCell>{i.name}</TableCell>
-                        <TableCell className="text-right font-mono text-sm">
-                          {formatCurrency(Number(i.unitPrice), i.currency, locale)}
-                        </TableCell>
-                        <TableCell className="text-right font-mono">{i.stock} {i.unit}</TableCell>
-                        <TableCell className="text-right">
-                          <ItemDialog
-                            value={{
-                              id: i.id,
-                              sku: i.sku,
-                              name: i.name,
-                              description: i.description,
-                              unit: i.unit,
-                              unitPrice: Number(i.unitPrice),
-                              currency: i.currency,
-                              taxRate: Number(i.taxRate),
-                              weightKg: i.weightKg ?? "",
-                              notes: i.notes,
-                            }}
-                            trigger={
-                              <button className="text-xs text-primary hover:underline">
-                                Edit
-                              </button>
-                            }
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader><CardTitle>{t("warehouse.movements")}</CardTitle></CardHeader>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>When</TableHead>
-                      <TableHead>{t("warehouse.sku")}</TableHead>
-                      <TableHead>Kind</TableHead>
-                      <TableHead className="text-right">{t("warehouse.quantity")}</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {movements.map((m) => (
-                      <TableRow key={m.id}>
-                        <TableCell className="text-xs">{formatDateTime(m.at, locale)}</TableCell>
-                        <TableCell className="font-mono text-xs">{m.item.sku}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={
-                              m.kind === "INBOUND"
-                                ? "success"
-                                : m.kind === "OUTBOUND"
-                                  ? "warning"
-                                  : "muted"
-                            }
-                          >
-                            {m.kind}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right font-mono">{Number(m.quantity)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </div>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </>
       )}
     </div>

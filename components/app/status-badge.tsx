@@ -52,6 +52,7 @@ const driver: Record<DriverStatus, Variant> = {
 };
 
 const quotation: Record<QuotationStatus, Variant> = {
+  PRICING: "warning",
   DRAFT: "muted",
   SENT: "default",
   COUNTERED: "warning",
@@ -60,6 +61,8 @@ const quotation: Record<QuotationStatus, Variant> = {
   EXPIRED: "warning",
   CONVERTED: "success",
   CANCELLED: "muted",
+  WON: "success",
+  LOST: "destructive",
 };
 
 const customer: Record<CustomerStatus, Variant> = {

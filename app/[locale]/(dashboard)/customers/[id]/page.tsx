@@ -90,7 +90,7 @@ export default async function CustomerDetailPage({
       getCustomFieldDefinitions(orgId, CustomFieldEntity.CONTACT),
       prisma.user.findFirst({
         where: { customerId: id, role: Role.CUSTOMER, orgId },
-        select: { id: true, email: true, lastLoginAt: true },
+        select: { id: true, email: true, name: true, lastLoginAt: true },
       }),
     ]);
 
@@ -309,7 +309,7 @@ export default async function CustomerDetailPage({
                       <TableHeader>
                         <TableRow>
                           <TableHead>{t("common.name")}</TableHead>
-                          <TableHead>{t("contacts.position")}</TableHead>
+                          <TableHead>{t("contacts.jobTitle")}</TableHead>
                           <TableHead>{t("common.email")}</TableHead>
                           <TableHead>{t("common.phone")}</TableHead>
                         </TableRow>
@@ -321,7 +321,7 @@ export default async function CustomerDetailPage({
                               {c.name}
                             </TableCell>
                             <TableCell className="text-sm text-muted-foreground">
-                              {c.position ?? "—"}
+                              {c.jobTitle ?? "—"}
                             </TableCell>
                             <TableCell className="text-sm text-muted-foreground">
                               {c.email ? (

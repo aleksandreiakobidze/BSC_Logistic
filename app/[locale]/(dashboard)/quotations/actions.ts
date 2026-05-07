@@ -10,7 +10,7 @@ import {
   QuotationStatus,
   OrderStatus,
   CustomerStatus,
-  LeadStatus,
+  ActivityKind,
 } from "@/lib/enums";
 import {
   nextQuotationNumber,
@@ -35,12 +35,27 @@ const createQuotationSchema = z.object({
   customerId: z.string().min(1),
   contactId: z.string().optional().nullable(),
   leadId: z.string().optional().nullable(),
+  salesManagerId: z.string().optional().nullable(),
   currency: z.string().default("USD"),
   validUntil: z.coerce.date().optional().nullable(),
   taxRate: z.coerce.number().min(0).default(0),
   discount: z.coerce.number().min(0).default(0),
   notes: z.string().optional().nullable(),
   lines: z.array(lineInputSchema).default([]),
+  // Optional RFQ header seed fields. Quotations now default to PRICING so the
+  // user lands on the Inquiry tab and can fill these in there too.
+  requestedTeams: z.array(z.string()).optional(),
+  priority: z.string().optional(),
+  mode: z.string().optional().nullable(),
+  incoterms: z.string().optional().nullable(),
+  originPort: z.string().optional().nullable(),
+  originAddress: z.string().optional().nullable(),
+  destinationPort: z.string().optional().nullable(),
+  destinationAddress: z.string().optional().nullable(),
+  cargoDescription: z.string().optional().nullable(),
+  cargoReadyDate: z.coerce.date().optional().nullable(),
+  /** Override the default initial status. Defaults to PRICING for new quotations. */
+  initialStatus: z.string().optional(),
 });
 
 const updateQuotationHeaderSchema = z.object({
@@ -65,21 +80,44 @@ export async function createQuotation(
     select: { id: true },
   });
 
+  const requestedTeams = (() => {
+    if (!data.requestedTeams || data.requestedTeams.length === 0) return null;
+    const seen = new Set<string>();
+    for (const t of data.requestedTeams) {
+      const v = String(t).trim().toUpperCase();
+      if (v) seen.add(v);
+    }
+    return seen.size === 0 ? null : Array.from(seen).join(",");
+  })();
+
+  const initialStatus = data.initialStatus ?? QuotationStatus.PRICING;
+
   const result = await prisma.$transaction(async (tx) => {
     const q = await tx.quotation.create({
       data: {
         orgId,
         number: nextQuotationNumber(),
-        status: QuotationStatus.DRAFT,
+        status: initialStatus,
         customerId: customer.id,
         contactId: data.contactId || null,
         leadId: data.leadId || null,
         ownerId: session.user.id,
+        salesManagerId: data.salesManagerId || null,
         currency: data.currency,
         taxRate: data.taxRate,
         discount: data.discount,
         notes: data.notes || null,
         validUntil: data.validUntil ?? null,
+        requestedTeams,
+        priority: data.priority || "MEDIUM",
+        mode: data.mode || null,
+        incoterms: data.incoterms || null,
+        originPort: data.originPort || null,
+        originAddress: data.originAddress || null,
+        destinationPort: data.destinationPort || null,
+        destinationAddress: data.destinationAddress || null,
+        cargoDescription: data.cargoDescription || null,
+        cargoReadyDate: data.cargoReadyDate ?? null,
       },
     });
 
@@ -109,7 +147,71 @@ export async function createQuotation(
   });
 
   revalidatePath("/quotations");
+  if (data.leadId) revalidatePath(`/leads/${data.leadId}`);
   return { ok: true, id: result.id, number: result.number };
+}
+
+const createQuotationFromLeadSchema = z.object({
+  leadId: z.string().min(1),
+  validUntil: z.coerce.date().optional().nullable(),
+  currency: z.string().optional(),
+  taxRate: z.coerce.number().min(0).optional(),
+});
+
+export type CreateQuotationFromLeadResult =
+  | { ok: true; id: string; number: string }
+  | {
+      ok: false;
+      error:
+        | { code: "LEAD_NOT_QUALIFIED"; currentStatus: string }
+        | { code: "LEAD_INCOMPLETE" };
+    };
+
+/**
+ * Quick-create a DRAFT quotation seeded from a QUALIFIED lead. Carries over
+ * customerId/contactId/leadId from the lead and delegates totals/audit to
+ * the same code path as `createQuotation`. Does NOT mutate Lead.status —
+ * the deal's progress now lives on the quotation.
+ */
+export async function createQuotationFromLead(
+  input: z.input<typeof createQuotationFromLeadSchema>,
+): Promise<CreateQuotationFromLeadResult> {
+  const { orgId } = await requireRole(staffRoles);
+  const data = createQuotationFromLeadSchema.parse(input);
+
+  const lead = await prisma.lead.findFirstOrThrow({
+    where: { id: data.leadId, orgId },
+    select: {
+      id: true,
+      status: true,
+      customerId: true,
+      contactId: true,
+      currency: true,
+    },
+  });
+
+  if (lead.status !== "QUALIFIED") {
+    return {
+      ok: false,
+      error: { code: "LEAD_NOT_QUALIFIED", currentStatus: lead.status },
+    };
+  }
+  if (!lead.customerId || !lead.contactId) {
+    return { ok: false, error: { code: "LEAD_INCOMPLETE" } };
+  }
+
+  const created = await createQuotation({
+    customerId: lead.customerId,
+    contactId: lead.contactId,
+    leadId: lead.id,
+    currency: data.currency ?? lead.currency ?? "USD",
+    taxRate: data.taxRate ?? 0,
+    validUntil: data.validUntil ?? null,
+    discount: 0,
+    lines: [],
+  });
+
+  return { ok: true, id: created.id, number: created.number };
 }
 
 export async function updateQuotationHeader(
@@ -558,16 +660,29 @@ function escapeHtml(s: string) {
   })[c]!);
 }
 
+export type SendQuotationEmailResult =
+  | { ok: true; emailSent: boolean; emailError?: string }
+  | {
+      ok: false;
+      error:
+        | { code: "INVALID_STATE"; currentStatus: string }
+        | { code: "NO_PORTAL_USER" };
+    };
+
 /**
  * Admin sends the quotation to the customer: snapshots the current state as
  * an ADMIN revision, marks SENT, and emails a portal link. Refuses unless
  * the customer has a portal user provisioned.
+ *
+ * Returns a discriminated union so input/state errors don't surface as HTTP
+ * 500. Email transport failures are captured in `emailError` but the SENT
+ * transition still commits — the user can resend from the portal page.
  */
 export async function sendQuotationEmail(input: {
   quotationId: string;
   locale?: string;
   message?: string;
-}) {
+}): Promise<SendQuotationEmailResult> {
   const { session, orgId } = await requireRole(staffRoles);
   const q = await prisma.quotation.findFirstOrThrow({
     where: { id: input.quotationId, orgId },
@@ -578,14 +693,15 @@ export async function sendQuotationEmail(input: {
     q.status !== QuotationStatus.DRAFT &&
     q.status !== QuotationStatus.COUNTERED
   ) {
-    throw new Error("Quotation can only be sent from DRAFT or COUNTERED");
+    return {
+      ok: false,
+      error: { code: "INVALID_STATE", currentStatus: q.status },
+    };
   }
 
   const portalUser = await findCustomerPortalUser(q.customerId);
   if (!portalUser) {
-    throw new Error(
-      "This customer has no portal access yet. Set up portal access on the customer page first.",
-    );
+    return { ok: false, error: { code: "NO_PORTAL_USER" } };
   }
 
   await prisma.$transaction(async (tx) => {
@@ -605,16 +721,24 @@ export async function sendQuotationEmail(input: {
 
   const locale = input.locale ?? "en";
   const url = quotationPortalUrl(locale, q.id);
-  await sendEmail({
-    to: portalUser.email,
-    subject: `Your quotation ${q.number}`,
-    html: buildQuotationEmail({
-      customerName: portalUser.name ?? q.customer.name,
-      number: q.number,
-      url,
-      message: input.message,
-    }),
-  });
+  let emailSent = true;
+  let emailError: string | undefined;
+  try {
+    await sendEmail({
+      to: portalUser.email,
+      subject: `Your quotation ${q.number}`,
+      html: buildQuotationEmail({
+        customerName: portalUser.name ?? q.customer.name,
+        number: q.number,
+        url,
+        message: input.message,
+      }),
+    });
+  } catch (err) {
+    emailSent = false;
+    emailError = err instanceof Error ? err.message : "Email transport failed";
+    console.error("[sendQuotationEmail] mail transport failed", err);
+  }
 
   await audit({
     action: "quotation.send",
@@ -622,7 +746,7 @@ export async function sendQuotationEmail(input: {
     entityId: q.id,
     orgId,
     userId: session.user.id,
-    meta: { to: portalUser.email },
+    meta: { to: portalUser.email, emailSent, emailError },
   });
 
   revalidatePath(`/quotations/${q.id}`);
@@ -632,7 +756,7 @@ export async function sendQuotationEmail(input: {
     reason: "sent",
     recipientRoles: ["ADMIN", "CUSTOMER"],
   });
-  return { ok: true };
+  return { ok: true, emailSent, ...(emailError ? { emailError } : {}) };
 }
 
 /**
@@ -921,10 +1045,16 @@ async function loadQuotation(id: string, orgId: string) {
 }
 
 function ensureEditable(status: string) {
-  // DRAFT = author is composing the first offer.
+  // PRICING   = collecting supplier offers (Inquiry tab); lines are usually
+  //             empty here but we still allow direct edits as an escape hatch.
+  // DRAFT     = author is composing the first customer-facing offer.
   // COUNTERED = customer pushed back; admin is preparing a new counter.
-  if (status !== QuotationStatus.DRAFT && status !== QuotationStatus.COUNTERED) {
-    throw new Error("Quotation is locked: only DRAFT or COUNTERED quotations are editable");
+  if (
+    status !== QuotationStatus.PRICING &&
+    status !== QuotationStatus.DRAFT &&
+    status !== QuotationStatus.COUNTERED
+  ) {
+    throw new Error("Quotation is locked: only PRICING, DRAFT, or COUNTERED quotations are editable");
   }
 }
 
@@ -938,45 +1068,86 @@ function generateOrderNumber(): string {
 // ─── Side effects on order confirmation (called from orders/actions.ts) ──────
 
 /**
- * Apply the customer-activation and Lead-WON side effects when an Order
- * transitions to a confirmed-or-later state. Call inside the same Prisma
+ * Apply customer-activation and Lead-won side effects when an Order
+ * transitions to a confirmed-or-later state. Called inside the same Prisma
  * transaction that flips the order status.
+ *
+ * Lead.status is NOT mutated here — qualified leads stay QUALIFIED for their
+ * lifetime. We stamp `Lead.wonAt` (once, idempotently) so reports can use
+ * `wonAt IS NOT NULL` as the source of truth for "won deals".
  */
 export async function applyOrderConfirmationSideEffects(
   tx: import("@prisma/client").Prisma.TransactionClient,
   orderId: string,
-): Promise<{ activatedCustomer: boolean; wonLead: boolean }> {
+): Promise<{
+  activatedCustomer: boolean;
+  wonLead: boolean;
+  wonQuotation: boolean;
+}> {
   const order = await tx.order.findUniqueOrThrow({
     where: { id: orderId },
     select: {
+      number: true,
       customerId: true,
       leadId: true,
       sourceQuotationId: true,
-      customer: { select: { id: true, status: true } },
-      lead: { select: { id: true, status: true } },
+      customer: { select: { id: true, status: true, firstActivatedAt: true } },
+      lead: { select: { id: true, orgId: true, wonAt: true } },
+      sourceQuotation: { select: { id: true, status: true, wonAt: true } },
     },
   });
 
   let activatedCustomer = false;
   let wonLead = false;
+  let wonQuotation = false;
 
   if (order.customer.status === CustomerStatus.PROSPECT) {
     await tx.customer.update({
       where: { id: order.customer.id },
-      data: { status: CustomerStatus.ACTIVE, firstActivatedAt: new Date() },
+      data: {
+        status: CustomerStatus.ACTIVE,
+        firstActivatedAt: order.customer.firstActivatedAt ?? new Date(),
+      },
     });
     activatedCustomer = true;
   }
 
-  if (order.lead && order.lead.status !== LeadStatus.WON) {
+  if (order.lead && !order.lead.wonAt) {
     await tx.lead.update({
       where: { id: order.lead.id },
-      data: { status: LeadStatus.WON, convertedAt: new Date() },
+      data: { wonAt: new Date() },
+    });
+    await tx.leadActivity.create({
+      data: {
+        leadId: order.lead.id,
+        kind: ActivityKind.NOTE,
+        note: `Order ${order.number} confirmed — lead marked as won`,
+      },
     });
     wonLead = true;
   }
 
-  return { activatedCustomer, wonLead };
+  // Mirror the lead-won contract for quotations: stamp `wonAt` (idempotent)
+  // so reports can use `wonAt IS NOT NULL` as the source of truth. We don't
+  // overwrite `status` here — the existing CONVERTED / ACCEPTED state is left
+  // intact so the customer-facing flow keeps working. Operators can still
+  // explicitly switch to WON via the inquiry tab if they want a clean badge.
+  if (order.sourceQuotation && !order.sourceQuotation.wonAt) {
+    await tx.quotation.update({
+      where: { id: order.sourceQuotation.id },
+      data: { wonAt: new Date() },
+    });
+    await tx.quotationActivity.create({
+      data: {
+        quotationId: order.sourceQuotation.id,
+        kind: "STATUS_CHANGE",
+        note: `Order ${order.number} confirmed — quotation marked as won`,
+      },
+    });
+    wonQuotation = true;
+  }
+
+  return { activatedCustomer, wonLead, wonQuotation };
 }
 
 // ─── Quotation chat / per-line comments ─────────────────────────────────────

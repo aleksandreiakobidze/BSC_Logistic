@@ -92,6 +92,9 @@ export default async function DriversPage({
                   <TableHead>{t("common.phone")}</TableHead>
                   <TableHead>Shipments</TableHead>
                   <TableHead>{t("common.status")}</TableHead>
+                  <TableHead className="text-xs text-muted-foreground">
+                    {t("common.created")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -107,6 +110,9 @@ export default async function DriversPage({
                     <TableCell>{d._count.shipments}</TableCell>
                     <TableCell>
                       <StatusBadge kind="driver" status={d.status} label={t(`drivers.status.${d.status}`)} />
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {formatDate(d.createdAt, locale)}
                     </TableCell>
                   </TableRow>
                 ))}

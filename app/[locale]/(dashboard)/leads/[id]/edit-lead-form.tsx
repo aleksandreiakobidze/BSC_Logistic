@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/select";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { LeadStatus, LeadSource, LeadPriority } from "@/lib/enums";
+import { LeadStatusBadge } from "@/components/app/lead-status-badge";
 import { CustomFieldsForm } from "@/components/app/custom-fields/custom-fields-form";
 import type {
   CustomFieldDefinitionView,
@@ -37,7 +38,6 @@ type LeadWithRelations = Lead & {
   > | null;
 };
 
-const STATUS_OPTIONS = Object.values(LeadStatus);
 const SOURCE_OPTIONS = Object.values(LeadSource);
 const PRIORITY_OPTIONS = Object.values(LeadPriority);
 const UNASSIGNED = "__none__";
@@ -55,7 +55,6 @@ export function EditLeadForm({
 }) {
   const t = useTranslations();
   const [loading, setLoading] = React.useState(false);
-  const [status, setStatus] = React.useState(lead.status);
   const [source, setSource] = React.useState(lead.source ?? "");
   const [priority, setPriority] = React.useState(
     lead.priority ?? LeadPriority.MEDIUM,
@@ -81,7 +80,6 @@ export function EditLeadForm({
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    fd.set("status", status);
     fd.set("source", source);
     fd.set("priority", priority);
     if (assignedToId && assignedToId !== UNASSIGNED) {
@@ -136,18 +134,9 @@ export function EditLeadForm({
           />
         </Field>
         <Field label={t("leads.status")}>
-          <Select value={status} onValueChange={setStatus}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {t(`leads.statuses.${s}`)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <div className="flex h-9 items-center px-1">
+            <LeadStatusBadge status={lead.status} />
+          </div>
         </Field>
         <Field label={t("leads.source")}>
           <Select value={source} onValueChange={setSource}>
@@ -214,7 +203,7 @@ export function EditLeadForm({
         <Field label={t("common.notes")} className="sm:col-span-2">
           <Textarea name="notes" rows={4} defaultValue={lead.notes ?? ""} />
         </Field>
-        {status === LeadStatus.LOST && (
+        {lead.status === LeadStatus.LOST && (
           <Field label={t("leads.lostReason")} className="sm:col-span-2">
             <Textarea
               name="lostReason"

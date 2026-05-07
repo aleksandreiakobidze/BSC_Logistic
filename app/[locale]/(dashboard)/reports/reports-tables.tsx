@@ -46,13 +46,11 @@ const STATUS_COLORS: Record<string, string> = {
   DRAFT: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
   OVERDUE: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
   CANCELLED: "bg-gray-100 text-gray-500 dark:bg-gray-800",
-  WON: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
   LOST: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
   NEW: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
   QUALIFIED: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-  PROPOSAL_SENT: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-  NEGOTIATION: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
   CONTACTED: "bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400",
+  WON: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
   QUOTE: "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400",
   CONFIRMED: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
   IN_PROGRESS: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
@@ -381,6 +379,8 @@ export type LeadRow = {
   currency: string;
   assignedTo: string;
   createdAt: string;
+  wonAt: string | null;
+  isWon: boolean;
 };
 
 // ─── Column definitions ───────────────────────────────────────────────────────
@@ -440,6 +440,17 @@ const LEAD_COLS: ColDef<LeadRow>[] = [
   { key: "name", label: "Name", sortable: true, render: (r) => <span className="font-medium">{r.name}</span> },
   { key: "company", label: "Company", sortable: true },
   { key: "status", label: "Status", render: (r) => <StatusChip status={r.status} /> },
+  {
+    key: "isWon",
+    label: "Won",
+    render: (r) =>
+      r.isWon ? (
+        <StatusChip status="WON" />
+      ) : (
+        <span className="text-muted-foreground">—</span>
+      ),
+  },
+  { key: "wonAt", label: "Won at", sortable: true, defaultVisible: false },
   { key: "source", label: "Source", defaultVisible: true },
   { key: "currency", label: "Currency", defaultVisible: false },
   {

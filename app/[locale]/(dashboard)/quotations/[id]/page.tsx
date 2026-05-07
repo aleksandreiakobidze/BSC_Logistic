@@ -5,17 +5,13 @@ import { ArrowLeft, FileSignature } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { requireOrg } from "@/lib/actions";
 import { PageHeader } from "@/components/app/page-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/app/status-badge";
 import {
-  QuotationLinesEditor,
   type QuotationLineRow,
 } from "@/components/app/quotation-lines-editor";
-import { formatCurrency } from "@/lib/utils";
-import { QuotationStatus } from "@/lib/enums";
+import { QuotationStatus, Role } from "@/lib/enums";
 import { buildLineDiff } from "@/lib/quotations";
 import { QuotationActionPanel } from "./action-panel";
-import { NegotiationPanel } from "./negotiation-panel";
 import {
   type QuotationVersion,
 } from "@/components/app/quotation-versions-view";
@@ -27,6 +23,16 @@ import {
 import { QuotationRealtimeProvider } from "@/components/app/quotation-realtime";
 import { QuotationHistoryButton } from "@/components/app/quotation-history-sheet";
 import { markQuotationMessagesRead } from "../actions";
+import { QuotationTabs } from "./quotation-tabs";
+import { CostSummaryBar } from "./inquiry/cost-summary-bar";
+import { TopActionBar } from "./inquiry/top-action-bar";
+import { InquiryTab } from "./inquiry/inquiry-tab";
+import { OfferTab } from "./offer-tab";
+import type { SupplierOfferRow } from "./inquiry/supplier-offers-table";
+import type { ActivityRow } from "./inquiry/inquiry-activity";
+import type { AttachmentRow } from "./inquiry/rfq-attachments-card";
+import type { ClientOfferLine } from "./inquiry/client-offer-preview";
+import type { RfqHeader } from "./inquiry/rfq-details-card";
 
 export default async function QuotationDetailPage({
   params,
@@ -41,10 +47,18 @@ export default async function QuotationDetailPage({
   const q = await prisma.quotation.findFirst({
     where: { id, orgId },
     include: {
-      customer: { select: { id: true, name: true, status: true } },
+      customer: {
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          users: { where: { role: Role.CUSTOMER }, select: { id: true } },
+        },
+      },
       contact: { select: { id: true, name: true } },
       lead: { select: { id: true, name: true } },
       owner: { select: { id: true, name: true } },
+      salesManager: { select: { id: true, name: true } },
       lines: { orderBy: { sortOrder: "asc" } },
       convertedOrders: {
         select: { id: true, number: true, status: true },
@@ -68,9 +82,46 @@ export default async function QuotationDetailPage({
         orderBy: { createdAt: "asc" },
         include: { author: { select: { name: true, email: true } } },
       },
+      supplierOffers: {
+        include: {
+          supplier: {
+            select: { id: true, name: true, code: true, email: true },
+          },
+          manager: { select: { id: true, name: true } },
+        },
+        orderBy: [{ team: "asc" }, { totalCost: "asc" }],
+      },
+      activities: {
+        orderBy: { at: "desc" },
+        take: 100,
+      },
     },
   });
   if (!q) notFound();
+
+  const [users, documents, activityAuthors] = await Promise.all([
+    prisma.user.findMany({
+      where: { orgId, isActive: true, role: { not: Role.CUSTOMER } },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.document.findMany({
+      where: { orgId, ownerType: "Quotation", ownerId: q.id },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.user.findMany({
+      where: {
+        id: {
+          in: Array.from(
+            new Set(q.activities.map((a) => a.userId).filter(Boolean) as string[]),
+          ),
+        },
+      },
+      select: { id: true, name: true, email: true },
+    }),
+  ]);
+
+  const authorById = new Map(activityAuthors.map((u) => [u.id, u]));
 
   await markQuotationMessagesRead(q.id);
 
@@ -145,8 +196,13 @@ export default async function QuotationDetailPage({
     q.status === QuotationStatus.DRAFT ||
     q.status === QuotationStatus.COUNTERED;
 
-  // For the negotiation panel header: customer's total according to their last
-  // counter (effective values), and admin's current live total.
+  const headerEditable =
+    q.status === QuotationStatus.PRICING ||
+    q.status === QuotationStatus.DRAFT ||
+    q.status === QuotationStatus.COUNTERED;
+
+  const hasPortalUser = q.customer.users.length > 0;
+
   const liveTotal = Number(q.total);
   const customerTotal = q.lines.reduce((acc, l) => {
     const isMod = l.customerStatus === "MODIFIED";
@@ -158,6 +214,83 @@ export default async function QuotationDetailPage({
       : Number(l.unitPrice);
     return acc + qty * price;
   }, 0);
+
+  // ─── Inquiry-tab projections ──────────────────────────────────────────────
+  const offerRows: SupplierOfferRow[] = q.supplierOffers.map((o) => ({
+    id: o.id,
+    team: o.team,
+    status: o.status,
+    isSelected: o.isSelected,
+    totalCost: Number(o.totalCost),
+    currency: o.currency,
+    transitTimeDays: o.transitTimeDays,
+    manager: o.manager
+      ? { id: o.manager.id, name: o.manager.name }
+      : null,
+    supplier: {
+      id: o.supplier.id,
+      name: o.supplier.name,
+      code: o.supplier.code,
+      email: o.supplier.email,
+    },
+    incoterms: o.incoterms,
+    notes: o.notes,
+  }));
+
+  const selectedOffers = offerRows.filter((o) => o.isSelected);
+  // V1 doesn't FX-convert; we sum naively assuming all selected offers are in
+  // the quotation's currency. The cost-summary bar carries the quote currency
+  // label so mixed-currency setups remain visually obvious.
+  const bestCost = selectedOffers.reduce((acc, o) => acc + o.totalCost, 0);
+
+  const clientLines: ClientOfferLine[] = lines.map((l) => ({
+    id: l.id,
+    description: l.description,
+    quantity: l.quantity,
+    unitPrice: l.unitPrice,
+    total: l.total,
+  }));
+
+  const documentsOut: AttachmentRow[] = documents.map((d) => ({
+    id: d.id,
+    name: d.name,
+    fileUrl: d.fileUrl,
+    mimeType: d.mimeType,
+    sizeBytes: d.sizeBytes,
+    createdAt: d.createdAt.toISOString(),
+  }));
+
+  const activitiesOut: ActivityRow[] = q.activities.map((a) => {
+    const author = a.userId ? authorById.get(a.userId) : undefined;
+    return {
+      id: a.id,
+      kind: a.kind,
+      note: a.note,
+      at: a.at.toISOString(),
+      authorName: author?.name ?? author?.email ?? null,
+    };
+  });
+
+  const rfqHeader: RfqHeader = {
+    salesManagerId: q.salesManagerId,
+    requestedTeams: q.requestedTeams,
+    priority: q.priority,
+    mode: q.mode,
+    incoterms: q.incoterms,
+    originPort: q.originPort,
+    originAddress: q.originAddress,
+    destinationPort: q.destinationPort,
+    destinationAddress: q.destinationAddress,
+    cargoDescription: q.cargoDescription,
+    shipmentDetails: q.shipmentDetails,
+    cargoValue: q.cargoValue == null ? null : Number(q.cargoValue),
+    cargoValueCurrency: q.cargoValueCurrency,
+    cargoReadyDate: q.cargoReadyDate ? q.cargoReadyDate.toISOString() : null,
+    specialRequirements: q.specialRequirements,
+  };
+
+  const initialTab: "inquiry" | "offer" =
+    q.status === QuotationStatus.PRICING ? "inquiry" : "offer";
 
   return (
     <QuotationRealtimeProvider quotationId={q.id} viewerRole="ADMIN">
@@ -186,50 +319,69 @@ export default async function QuotationDetailPage({
           }
         />
 
+        <CostSummaryBar
+          bestCost={bestCost}
+          sellPrice={liveTotal}
+          currency={q.currency}
+          locale={locale}
+        />
+
+        <TopActionBar
+          quotationId={q.id}
+          status={q.status}
+          hasSelectedOffers={selectedOffers.length > 0}
+          hasLines={lines.length > 0}
+          hasPortalUser={hasPortalUser}
+        />
+
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="min-w-0 space-y-4">
-            {q.status === QuotationStatus.COUNTERED && (
-              <NegotiationPanel
-                quotationId={q.id}
-                diff={diff}
-                currency={q.currency}
-                liveTotal={liveTotal}
-                customerTotal={customerTotal}
-                lineMessages={Object.fromEntries(messagesByLine)}
-              />
-            )}
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>{t("quotations.lines.title")}</CardTitle>
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                  {q.currency}
-                </span>
-              </CardHeader>
-              <CardContent>
-                <QuotationLinesEditor
+          <div className="min-w-0">
+            <QuotationTabs
+              initialTab={initialTab}
+              inquirySlot={
+                <InquiryTab
                   quotationId={q.id}
-                  lines={lines}
+                  status={q.status}
+                  number={q.number}
+                  customerName={q.customer.name}
+                  contactName={q.contact?.name ?? null}
+                  ownerName={q.salesManager?.name ?? q.owner?.name ?? null}
+                  createdAt={q.createdAt.toISOString()}
                   currency={q.currency}
+                  total={liveTotal}
+                  header={rfqHeader}
+                  offers={offerRows}
+                  lines={clientLines}
+                  documents={documentsOut}
+                  activities={activitiesOut}
+                  users={users}
                   locale={locale}
-                  readOnly={!editable}
+                  canEditHeader={headerEditable}
                 />
-                <TotalsFooter
-                  subtotal={Number(q.subtotal)}
-                  discount={Number(q.discount)}
-                  taxAmount={Number(q.taxAmount)}
-                  taxRate={Number(q.taxRate)}
-                  total={Number(q.total)}
+              }
+              offerSlot={
+                <OfferTab
+                  quotationId={q.id}
+                  status={q.status}
                   currency={q.currency}
                   locale={locale}
-                  labels={{
-                    subtotal: t("quotations.subtotal"),
-                    discount: t("quotations.discount"),
-                    tax: t("quotations.taxAmount"),
-                    total: t("quotations.total"),
+                  editable={editable}
+                  showNegotiation={q.status === QuotationStatus.COUNTERED}
+                  diff={diff}
+                  liveTotal={liveTotal}
+                  customerTotal={customerTotal}
+                  lines={lines}
+                  lineMessages={Object.fromEntries(messagesByLine)}
+                  totals={{
+                    subtotal: Number(q.subtotal),
+                    discount: Number(q.discount),
+                    taxAmount: Number(q.taxAmount),
+                    taxRate: Number(q.taxRate),
+                    total: Number(q.total),
                   }}
                 />
-              </CardContent>
-            </Card>
+              }
+            />
           </div>
 
           <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pr-1">
@@ -263,64 +415,5 @@ export default async function QuotationDetailPage({
         </div>
       </div>
     </QuotationRealtimeProvider>
-  );
-}
-
-function TotalsFooter({
-  subtotal,
-  discount,
-  taxAmount,
-  taxRate,
-  total,
-  currency,
-  locale,
-  labels,
-}: {
-  subtotal: number;
-  discount: number;
-  taxAmount: number;
-  taxRate: number;
-  total: number;
-  currency: string;
-  locale: string;
-  labels: {
-    subtotal: string;
-    discount: string;
-    tax: string;
-    total: string;
-  };
-}) {
-  return (
-    <div className="mt-4 ml-auto w-full max-w-sm space-y-1 border-t pt-3 text-sm font-mono">
-      <Row label={labels.subtotal} value={formatCurrency(subtotal, currency, locale)} />
-      <Row label={labels.discount} value={formatCurrency(discount, currency, locale)} />
-      <Row
-        label={`${labels.tax} (${taxRate}%)`}
-        value={formatCurrency(taxAmount, currency, locale)}
-      />
-      <div className="my-1 border-t" />
-      <Row
-        label={labels.total}
-        value={formatCurrency(total, currency, locale)}
-        strong
-      />
-    </div>
-  );
-}
-
-function Row({
-  label,
-  value,
-  strong,
-}: {
-  label: React.ReactNode;
-  value: React.ReactNode;
-  strong?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={strong ? "font-semibold" : ""}>{value}</span>
-    </div>
   );
 }

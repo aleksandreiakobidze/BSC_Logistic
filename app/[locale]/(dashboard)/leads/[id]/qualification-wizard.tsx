@@ -35,12 +35,11 @@ import {
   type ContactSnapshot,
 } from "@/components/app/contact-picker";
 import { qualifyLead, type QualifyLeadInput } from "../actions";
-import { createQuotation } from "@/app/[locale]/(dashboard)/quotations/actions";
 
 type WizardStep = "customer" | "contact" | "review";
 
 type CustomerStrategy = "create" | "link";
-type ContactStrategy = "create" | "link" | "skip";
+type ContactStrategy = "create" | "link";
 
 interface CustomerForm {
   name: string;
@@ -75,10 +74,25 @@ interface LeadSeed {
   customer: CustomerSnapshot | null;
 }
 
-export function QualificationWizard({ lead }: { lead: LeadSeed }) {
+export function QualificationWizard({
+  lead,
+  open: openProp,
+  onOpenChange,
+  trigger,
+}: {
+  lead: LeadSeed;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  trigger?: React.ReactNode;
+}) {
   const t = useTranslations();
   const router = useRouter();
-  const [open, setOpen] = React.useState(false);
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const open = openProp ?? internalOpen;
+  const setOpen = (value: boolean) => {
+    if (onOpenChange) onOpenChange(value);
+    else setInternalOpen(value);
+  };
   const [step, setStep] = React.useState<WizardStep>("customer");
   const [submitting, setSubmitting] = React.useState(false);
 
@@ -114,9 +128,6 @@ export function QualificationWizard({ lead }: { lead: LeadSeed }) {
     company: lead.contact?.company ?? lead.company ?? "",
   });
 
-  // Quotation toggle
-  const [createQuote, setCreateQuote] = React.useState(true);
-
   function reset() {
     setStep("customer");
     setSubmitting(false);
@@ -138,9 +149,18 @@ export function QualificationWizard({ lead }: { lead: LeadSeed }) {
         toast.error(t("common.error"));
         return;
       }
-      if (contactStrategy === "create" && !contactForm.name.trim()) {
-        toast.error(t("common.error"));
-        return;
+      if (contactStrategy === "create") {
+        if (!contactForm.name.trim()) {
+          toast.error(t("common.error"));
+          return;
+        }
+        // Server requires either phone or email — check client-side too.
+        if (!contactForm.phone.trim() && !contactForm.email.trim()) {
+          toast.error(
+            t("leads.transition.errors.CONTACT_INVALID_PHONE_OR_EMAIL"),
+          );
+          return;
+        }
       }
       setStep("review");
     }
@@ -173,46 +193,34 @@ export function QualificationWizard({ lead }: { lead: LeadSeed }) {
                 },
               },
         contact:
-          contactStrategy === "skip"
-            ? { strategy: "skip" }
-            : contactStrategy === "link" && linkedContact
-              ? { strategy: "link", contactId: linkedContact.id }
-              : {
-                  strategy: "create",
-                  data: {
-                    name: contactForm.name,
-                    email: contactForm.email || null,
-                    phone: contactForm.phone || null,
-                    position: contactForm.position || null,
-                    company: contactForm.company || null,
-                  },
+          contactStrategy === "link" && linkedContact
+            ? { strategy: "link", contactId: linkedContact.id }
+            : {
+                strategy: "create",
+                data: {
+                  name: contactForm.name,
+                  email: contactForm.email || null,
+                  phone: contactForm.phone || null,
+                  position: contactForm.position || null,
+                  company: contactForm.company || null,
                 },
+              },
       };
 
       const res = await qualifyLead(lead.id, input);
-      if (!res.ok) throw new Error("Failed");
-
-      let quotationId: string | undefined;
-      if (createQuote && res.customerId) {
-        const q = await createQuotation({
-          customerId: res.customerId,
-          contactId: res.contactId ?? null,
-          leadId: lead.id,
-          currency: lead.currency,
-          taxRate: 0,
-          discount: 0,
-          notes: null,
-          lines: [],
-        });
-        quotationId = q.id;
+      if (!res.ok) {
+        const msg =
+          res.error.code === "VALIDATION"
+            ? res.error.message
+            : t("leads.transition.errors.LEAD_NOT_QUALIFIABLE");
+        toast.error(msg);
+        return;
       }
 
       toast.success(t("leads.qualifySuccess"));
       setOpen(false);
       reset();
-      if (quotationId) router.push(`/quotations/${quotationId}`);
-      else if (res.customerId) router.push(`/customers/${res.customerId}`);
-      else router.refresh();
+      router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.error"));
     } finally {
@@ -230,10 +238,14 @@ export function QualificationWizard({ lead }: { lead: LeadSeed }) {
         if (!o) reset();
       }}
     >
-      <Button onClick={() => setOpen(true)}>
-        <UserCheck className="mr-2 h-4 w-4" />
-        {t("leads.convertToCustomer")}
-      </Button>
+      {trigger === undefined ? (
+        <Button onClick={() => setOpen(true)}>
+          <UserCheck className="mr-2 h-4 w-4" />
+          {t("leads.convertToCustomer")}
+        </Button>
+      ) : (
+        trigger
+      )}
       <DialogContent className="max-w-xl" withDescription>
         <DialogHeader>
           <DialogTitle>{t("leads.qualifyTitle")}</DialogTitle>
@@ -299,14 +311,10 @@ export function QualificationWizard({ lead }: { lead: LeadSeed }) {
                   : customerForm.name
               }
               contactLabel={
-                contactStrategy === "skip"
-                  ? "—"
-                  : contactStrategy === "link"
-                    ? (linkedContact?.name ?? "—")
-                    : contactForm.name
+                contactStrategy === "link"
+                  ? (linkedContact?.name ?? "—")
+                  : contactForm.name
               }
-              createQuote={createQuote}
-              setCreateQuote={setCreateQuote}
             />
           )}
         </div>
@@ -333,11 +341,14 @@ export function QualificationWizard({ lead }: { lead: LeadSeed }) {
               {t("common.next") ?? "Next"}
             </Button>
           ) : (
-            <Button type="button" onClick={finish} disabled={submitting} className="gap-1.5">
+            <Button
+              type="button"
+              onClick={finish}
+              disabled={submitting}
+              className="gap-1.5"
+            >
               {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {createQuote
-                ? t("leads.wizard.qualifyAndCreateQuote")
-                : t("leads.wizard.qualifyOnly")}
+              {t("leads.wizard.qualifyOnly")}
             </Button>
           )}
         </DialogFooter>
@@ -459,7 +470,6 @@ function ContactStep({
         options={[
           { id: "link", icon: Search, label: t("leads.wizard.linkExisting") },
           { id: "create", icon: Plus, label: t("leads.wizard.createNew") },
-          { id: "skip", icon: UserCircle2, label: t("leads.wizard.skipContact") },
         ]}
       />
       {strategy === "link" && (
@@ -499,8 +509,11 @@ function ContactStep({
               />
             </div>
           </div>
+          <p className="text-xs text-muted-foreground">
+            {t("leads.transition.errors.CONTACT_INVALID_PHONE_OR_EMAIL")}
+          </p>
           <div>
-            <Label htmlFor="qw-ct-position">{t("contacts.position")}</Label>
+            <Label htmlFor="qw-ct-position">{t("contacts.jobTitle")}</Label>
             <Input
               id="qw-ct-position"
               value={form.position}
@@ -511,11 +524,6 @@ function ContactStep({
           </div>
         </div>
       )}
-      {strategy === "skip" && (
-        <p className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-          {t("leads.wizard.skipContactHint")}
-        </p>
-      )}
     </div>
   );
 }
@@ -523,13 +531,9 @@ function ContactStep({
 function ReviewStep({
   customerLabel,
   contactLabel,
-  createQuote,
-  setCreateQuote,
 }: {
   customerLabel: string;
   contactLabel: string;
-  createQuote: boolean;
-  setCreateQuote: (v: boolean) => void;
 }) {
   const t = useTranslations();
   return (
@@ -548,22 +552,9 @@ function ReviewStep({
           <span className="font-medium">{contactLabel}</span>
         </div>
       </div>
-      <label className="flex cursor-pointer items-center justify-between gap-2 rounded-lg border bg-card p-3 text-sm hover:bg-muted/30">
-        <div className="space-y-0.5">
-          <div className="font-medium">
-            {t("leads.wizard.createQuotation")}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {t("leads.wizard.createQuotationHint")}
-          </div>
-        </div>
-        <input
-          type="checkbox"
-          className="h-4 w-4"
-          checked={createQuote}
-          onChange={(e) => setCreateQuote(e.target.checked)}
-        />
-      </label>
+      <p className="rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        {t("leads.qualifyDescription", { name: customerLabel })}
+      </p>
     </div>
   );
 }

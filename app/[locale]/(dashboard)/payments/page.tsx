@@ -24,7 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { ListFilters } from "@/components/app/list-filters";
 import { ExportButton } from "@/components/app/export-button";
 import { EmptyState } from "@/components/app/empty-state";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/utils";
 import { refreshOverdueInvoices } from "@/lib/payments";
 import { InvoiceStatus, PaymentKind, PaymentMethod } from "@/lib/enums";
 import { PaymentRowActions } from "./payment-row-actions";
@@ -195,6 +195,9 @@ export default async function PaymentsPage({
                   <TableHead>{t("payments.method")}</TableHead>
                   <TableHead>{t("payments.reference")}</TableHead>
                   <TableHead className="text-right">{t("payments.amount")}</TableHead>
+                  <TableHead className="text-xs text-muted-foreground">
+                    {t("common.created")}
+                  </TableHead>
                   <TableHead className="text-right">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -271,6 +274,9 @@ export default async function PaymentsPage({
                           {isPayout ? "-" : "+"}
                           {formatCurrency(Number(p.amount), p.currency, locale)}
                         </span>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {formatDate(p.createdAt, locale)}
                       </TableCell>
                       <TableCell className="text-right">
                         <PaymentRowActions

@@ -89,6 +89,7 @@ export default async function CustomersPage({
     orderCount: c._count.orders,
     invoiceCount: c._count.invoices,
     creditLimit: Number(c.creditLimit),
+    createdAt: c.createdAt.toISOString(),
     cf: valuesByCustomer.get(c.id) ?? {},
   }));
 
@@ -135,6 +136,7 @@ export default async function CustomersPage({
                 orders: tx("customers.ordersCol", "Orders"),
                 invoices: tx("customers.invoicesCol", "Invoices"),
                 credit: t("customers.creditLimit"),
+                created: t("common.created"),
               }}
             />
           </CardContent>

@@ -26,6 +26,8 @@ public/uploads/
 
 # Local Azure deployment artifacts (never committed)
 acr-build*.log
+acr-*.txt
+acr-*.log
 migrate-job.yaml
 migrate-logs.txt
 web-logs.txt

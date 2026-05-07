@@ -13,6 +13,7 @@ import { CustomFieldEntity } from "@/lib/custom-fields";
 import { getCustomFieldDefinitions } from "../../settings/custom-fields/actions";
 import { ListFilters } from "@/components/app/list-filters";
 import { VehicleStatus, VehicleType } from "@/lib/enums";
+import { formatDate } from "@/lib/utils";
 
 const STATUS_OPTIONS = Object.values(VehicleStatus).map((s) => ({ label: s, value: s }));
 const TYPE_OPTIONS = Object.values(VehicleType).map((t) => ({ label: t, value: t }));
@@ -94,6 +95,9 @@ export default async function VehiclesPage({
                   <TableHead>{t("fleet.capacity")}</TableHead>
                   <TableHead>{t("fleet.odometer")}</TableHead>
                   <TableHead>{t("fleet.status")}</TableHead>
+                  <TableHead className="text-xs text-muted-foreground">
+                    {t("common.created")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -110,6 +114,9 @@ export default async function VehiclesPage({
                     <TableCell>{v.odometerKm.toLocaleString()} km</TableCell>
                     <TableCell>
                       <StatusBadge kind="vehicle" status={v.status} />
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {formatDate(v.createdAt, locale)}
                     </TableCell>
                   </TableRow>
                 ))}

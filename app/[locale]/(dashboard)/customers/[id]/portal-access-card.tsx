@@ -3,7 +3,13 @@
 import * as React from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
-import { Loader2, KeyRound, ShieldCheck, UserPlus } from "lucide-react";
+import {
+  Loader2,
+  KeyRound,
+  ShieldCheck,
+  UserPlus,
+  Pencil,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,11 +18,13 @@ import { Label } from "@/components/ui/label";
 import {
   createCustomerPortalUser,
   resetCustomerPortalPassword,
+  updateCustomerPortalUser,
 } from "../portal-actions";
 
 export type PortalUserSummary = {
   id: string;
   email: string;
+  name: string | null;
   lastLoginAt: Date | string | null;
 } | null;
 
@@ -35,6 +43,7 @@ export function PortalAccessCard({
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
   const [reset, setReset] = React.useState(false);
+  const [editLogin, setEditLogin] = React.useState(false);
 
   function k(key: string, fallback: string): string {
     try {
@@ -53,12 +62,16 @@ export function PortalAccessCard({
     const name = String(fd.get("name") ?? "").trim();
     setBusy(true);
     try {
-      await createCustomerPortalUser({
+      const res = await createCustomerPortalUser({
         customerId,
         email,
         password,
         name: name || undefined,
       });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
       toast.success(k("createdToast", "Portal access created"));
       form.reset();
       router.refresh();
@@ -77,10 +90,46 @@ export function PortalAccessCard({
     const password = String(fd.get("password") ?? "");
     setBusy(true);
     try {
-      await resetCustomerPortalPassword({ userId: portalUser.id, password });
+      const res = await resetCustomerPortalPassword({
+        userId: portalUser.id,
+        password,
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
       toast.success(k("resetToast", "Password updated"));
       form.reset();
       setReset(false);
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function onEditLogin(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!portalUser) return;
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+    const email = String(fd.get("email") ?? "").trim();
+    const name = String(fd.get("name") ?? "").trim();
+    if (!email) return;
+    setBusy(true);
+    try {
+      const res = await updateCustomerPortalUser({
+        userId: portalUser.id,
+        email,
+        name: name || undefined,
+      });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(k("loginUpdated", "Login updated"));
+      setEditLogin(false);
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error");
@@ -112,17 +161,53 @@ export function PortalAccessCard({
                 </div>
               )}
             </div>
-            {!reset ? (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full justify-start gap-2"
-                onClick={() => setReset(true)}
+            {editLogin ? (
+              <form
+                key={portalUser.id}
+                onSubmit={onEditLogin}
+                className="space-y-2"
               >
-                <KeyRound className="h-4 w-4" />
-                {k("resetPassword", "Reset password")}
-              </Button>
-            ) : (
+                <div className="space-y-1.5">
+                  <Label className="text-xs">
+                    {k("loginEmail", "Login email")}
+                  </Label>
+                  <Input
+                    name="email"
+                    type="email"
+                    required
+                    defaultValue={portalUser.email}
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">
+                    {k("name", "Display name")}
+                  </Label>
+                  <Input
+                    name="name"
+                    defaultValue={portalUser.name ?? ""}
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setEditLogin(false)}
+                  >
+                    {t("common.cancel")}
+                  </Button>
+                  <Button type="submit" size="sm" className="flex-1" disabled={busy}>
+                    {busy ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    {k("save", "Save")}
+                  </Button>
+                </div>
+              </form>
+            ) : reset ? (
               <form onSubmit={onReset} className="space-y-2">
                 <div className="space-y-1.5">
                   <Label className="text-xs">
@@ -154,6 +239,29 @@ export function PortalAccessCard({
                   </Button>
                 </div>
               </form>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="justify-start gap-2"
+                  onClick={() => setEditLogin(true)}
+                >
+                  <Pencil className="h-4 w-4" />
+                  {k("editLogin", "Edit login")}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="justify-start gap-2"
+                  onClick={() => setReset(true)}
+                >
+                  <KeyRound className="h-4 w-4" />
+                  {k("resetPassword", "Reset password")}
+                </Button>
+              </div>
             )}
           </>
         ) : (

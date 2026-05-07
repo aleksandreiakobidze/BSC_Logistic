@@ -25,7 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
-import { LeadStatus, LeadSource, LeadPriority } from "@/lib/enums";
+import { LeadSource, LeadPriority } from "@/lib/enums";
 import { CustomFieldsForm } from "@/components/app/custom-fields/custom-fields-form";
 import type { CustomFieldDefinitionView } from "@/lib/custom-fields";
 import {
@@ -34,7 +34,6 @@ import {
 } from "@/components/app/contact-picker";
 import { createLead } from "./actions";
 
-const STATUS_OPTIONS = Object.values(LeadStatus);
 const SOURCE_OPTIONS = Object.values(LeadSource);
 const PRIORITY_OPTIONS = Object.values(LeadPriority);
 const UNASSIGNED = "__none__";
@@ -49,7 +48,6 @@ export function NewLeadButton({
   const t = useTranslations();
   const [open, setOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
-  const [status, setStatus] = React.useState<string>(LeadStatus.NEW);
   const [source, setSource] = React.useState<string>("");
   const [priority, setPriority] = React.useState<string>(LeadPriority.MEDIUM);
   const [assignedTo, setAssignedTo] = React.useState<string>(UNASSIGNED);
@@ -71,7 +69,6 @@ export function NewLeadButton({
   }
 
   function reset() {
-    setStatus(LeadStatus.NEW);
     setSource("");
     setPriority(LeadPriority.MEDIUM);
     setAssignedTo(UNASSIGNED);
@@ -89,7 +86,6 @@ export function NewLeadButton({
     setLoading(true);
     try {
       const fd = new FormData(form);
-      fd.set("status", status);
       fd.set("source", source);
       fd.set("priority", priority);
       if (assignedTo !== UNASSIGNED) fd.set("assignedToId", assignedTo);
@@ -168,20 +164,6 @@ export function NewLeadButton({
                 step="0.01"
                 defaultValue={0}
               />
-            </Field>
-            <Field label={t("leads.status")}>
-              <Select value={status} onValueChange={setStatus}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {STATUS_OPTIONS.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {t(`leads.statuses.${s}`)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </Field>
             <Field label={t("leads.source")}>
               <Select value={source} onValueChange={setSource}>

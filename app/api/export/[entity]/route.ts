@@ -219,11 +219,18 @@ async function fetchRows(entity: Entity, orgId: string): Promise<SheetRow[]> {
         include: { customer: { select: { name: true } } },
       });
       return data.map((c) => ({
+        Code: c.code,
         Name: c.name,
-        Position: c.position ?? "",
-        Customer: c.customer?.name ?? c.company ?? "",
+        Status: c.status,
+        RelationshipType: c.relationshipType,
+        Company: c.company ?? "",
+        Customer: c.customer?.name ?? "",
+        TaxID: c.taxId ?? "",
+        JobTitle: c.jobTitle ?? "",
+        Industry: c.industry ?? "",
         Email: c.email ?? "",
         Phone: c.phone ?? "",
+        CreatedAt: c.createdAt.toISOString().slice(0, 10),
       }));
     }
 

@@ -3,7 +3,16 @@ import { prisma } from "@/lib/db";
 import { requireOrg } from "@/lib/actions";
 import { PageHeader } from "@/components/app/page-header";
 import { formatCurrency } from "@/lib/utils";
-import { TrendingUp, TrendingDown, Minus, DollarSign, Truck, Users, AlertCircle } from "lucide-react";
+import {
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  DollarSign,
+  Truck,
+  Users,
+  AlertCircle,
+  Trophy,
+} from "lucide-react";
 import { ExportButton } from "@/components/app/export-button";
 import {
   RevenueWidget,
@@ -214,6 +223,8 @@ export default async function ReportsPage({
     revenueSparkRaw,
     leadsSparkRaw,
     shipmentsSparkRaw,
+    wonLeadsCount,
+    wonLeadsPrevCount,
   ] = await Promise.all([
     (async () => {
       const invoices = await prisma.invoice.findMany({
@@ -284,7 +295,8 @@ export default async function ReportsPage({
       where: {
         orgId,
         createdAt: inRangeCreated,
-        status: { notIn: ["WON", "LOST"] },
+        status: { notIn: ["LOST"] },
+        wonAt: null,
       },
       _sum: { estimatedValue: true },
     }),
@@ -293,7 +305,8 @@ export default async function ReportsPage({
       where: {
         orgId,
         createdAt: inRangePrev,
-        status: { notIn: ["WON", "LOST"] },
+        status: { notIn: ["LOST"] },
+        wonAt: null,
       },
       _sum: { estimatedValue: true },
     }),
@@ -353,6 +366,7 @@ export default async function ReportsPage({
         estimatedValue: true,
         currency: true,
         createdAt: true,
+        wonAt: true,
         assignedTo: { select: { name: true } },
       },
     }),
@@ -375,6 +389,14 @@ export default async function ReportsPage({
     prisma.shipment.findMany({
       where: { orgId, createdAt: { gte: sparklineFrom } },
       select: { createdAt: true },
+    }),
+
+    prisma.lead.count({
+      where: { orgId, wonAt: { gte: range.from, lte: range.to } },
+    }),
+
+    prisma.lead.count({
+      where: { orgId, wonAt: { gte: range.prevFrom, lte: range.prevTo } },
     }),
   ]);
 
@@ -471,6 +493,11 @@ export default async function ReportsPage({
   const prevPipelineVal = Number(pipelinePrevAgg._sum.estimatedValue ?? 0);
   const pipelineDelta =
     prevPipelineVal > 0 ? ((pipelineVal - prevPipelineVal) / prevPipelineVal) * 100 : 0;
+
+  const wonDelta =
+    wonLeadsPrevCount > 0
+      ? ((wonLeadsCount - wonLeadsPrevCount) / wonLeadsPrevCount) * 100
+      : 0;
 
   const shipmentsDelta =
     shipmentsPrevCount > 0
@@ -597,6 +624,8 @@ export default async function ReportsPage({
     currency: l.currency,
     assignedTo: l.assignedTo?.name ?? "—",
     createdAt: fmtDate(l.createdAt),
+    wonAt: l.wonAt ? fmtDate(l.wonAt) : null,
+    isWon: !!l.wonAt,
   }));
 
   const presetLabel = t(`reports.presets.${range.preset}`);
@@ -619,7 +648,7 @@ export default async function ReportsPage({
       />
 
       {/* ── KPI Cards ── */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard
           title={t("reports.kpiRevenue")}
           value={fmt(thisRev)}
@@ -665,6 +694,18 @@ export default async function ReportsPage({
           spark={outstandingSpark}
           sparkColor="rgb(245 158 11)"
           delay={180}
+        />
+        <KpiCard
+          title={t("reports.kpiWon")}
+          value={wonLeadsCount.toString()}
+          delta={wonDelta}
+          deltaLabel={vsPrev}
+          icon={<Trophy className="h-5 w-5 text-emerald-500" />}
+          accent="bg-emerald-500/10"
+          spotlight="bg-[radial-gradient(circle_at_top_right,rgb(16_185_129/.32),transparent_60%)]"
+          spark={leadsSpark}
+          sparkColor="rgb(16 185 129)"
+          delay={240}
         />
       </div>
 

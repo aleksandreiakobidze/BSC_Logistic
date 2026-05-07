@@ -122,6 +122,19 @@ export function QuotationLinesEditor({
       unitPrice: picked.unitPrice,
       itemId: picked.id,
     });
+    // Currency mismatch hint: lines inherit the quotation's currency, so when
+    // the picked item is priced in another currency we leave the numeric value
+    // intact (no FX conversion in scope) but warn the user to adjust manually.
+    if (picked.currency && picked.currency !== currency) {
+      toast.warning(
+        t.has("quotations.lines.currencyMismatch")
+          ? t("quotations.lines.currencyMismatch", {
+              itemCurrency: picked.currency,
+              quotationCurrency: currency,
+            })
+          : `Item priced in ${picked.currency}, quotation is in ${currency}. Adjust price if needed.`,
+      );
+    }
   }
 
   async function removeRow(id: string) {

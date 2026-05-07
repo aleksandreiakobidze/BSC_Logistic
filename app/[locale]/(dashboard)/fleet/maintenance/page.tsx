@@ -73,6 +73,9 @@ export default async function MaintenancePage({
                   <TableHead>Due</TableHead>
                   <TableHead>Completed</TableHead>
                   <TableHead className="text-right">Cost</TableHead>
+                  <TableHead className="text-xs text-muted-foreground">
+                    {t("common.created")}
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -93,6 +96,9 @@ export default async function MaintenancePage({
                     </TableCell>
                     <TableCell className="text-right font-mono">
                       {formatCurrency(Number(m.cost), "USD", locale)}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {formatDate(m.createdAt, locale)}
                     </TableCell>
                   </TableRow>
                 ))}

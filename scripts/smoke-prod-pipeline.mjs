@@ -5,7 +5,7 @@
  *   3. Add lines, recompute totals
  *   4. send -> accept -> convert to Order
  *   5. Confirm the Order, run the side-effects that flip
- *      Customer.status = ACTIVE and Lead.status = WON
+ *      Customer.status = ACTIVE and stamp Lead.wonAt
  *   6. Cleanup
  */
 
@@ -97,17 +97,24 @@ async function applyOrderConfirmationSideEffects(orderId) {
     });
   }
 
-  // Lead WON via the quotation backlink
+  // Stamp lead.wonAt via the quotation backlink. Status is intentionally
+  // NOT mutated here — the source-of-truth for "won" is now Lead.wonAt.
   if (order.sourceQuotationId) {
     const q = await prisma.quotation.findUnique({
       where: { id: order.sourceQuotationId },
       select: { leadId: true },
     });
     if (q?.leadId) {
-      await prisma.lead.update({
+      const lead = await prisma.lead.findUnique({
         where: { id: q.leadId },
-        data: { status: "WON" },
+        select: { wonAt: true },
       });
+      if (lead && !lead.wonAt) {
+        await prisma.lead.update({
+          where: { id: q.leadId },
+          data: { wonAt: new Date() },
+        });
+      }
     }
   }
 }
@@ -124,12 +131,13 @@ async function run() {
     data: { status: "PROSPECT" },
   });
 
-  // 1. Create lead
+  // 1. Create a QUALIFIED lead linked to the customer so the side-effect
+  //    can stamp wonAt and we can assert status stays unchanged.
   const lead = await prisma.lead.create({
     data: {
       orgId: org.id,
       name: "Smoke pipeline lead",
-      status: "NEW",
+      status: "QUALIFIED",
       assignedToId: admin.id,
       customerId: customer.id,
       source: "smoke-script",
@@ -243,7 +251,7 @@ async function run() {
   });
   const finalLead = await prisma.lead.findUniqueOrThrow({
     where: { id: lead.id },
-    select: { status: true },
+    select: { status: true, wonAt: true },
   });
   const finalQuote = await prisma.quotation.findUniqueOrThrow({
     where: { id: quote.id },
@@ -257,7 +265,8 @@ async function run() {
   const checks = [
     ["Customer.status == ACTIVE", finalCustomer.status === "ACTIVE"],
     ["Customer.firstActivatedAt set", finalCustomer.firstActivatedAt != null],
-    ["Lead.status == WON", finalLead.status === "WON"],
+    ["Lead.wonAt set", finalLead.wonAt != null],
+    ["Lead.status stays QUALIFIED", finalLead.status === "QUALIFIED"],
     ["Quotation.status == CONVERTED", finalQuote.status === "CONVERTED"],
     ["Order.status == CONFIRMED", finalOrder.status === "CONFIRMED"],
     ["Order has 2 line items", finalOrder.lines.length === 2],

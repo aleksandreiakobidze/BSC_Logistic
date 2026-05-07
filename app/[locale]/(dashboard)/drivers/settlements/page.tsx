@@ -128,6 +128,9 @@ export default async function SettlementsPage({
                   <TableHead className="text-right">{t("settlements.deductions")}</TableHead>
                   <TableHead className="text-right">{t("settlements.net")}</TableHead>
                   <TableHead>{t("common.status")}</TableHead>
+                  <TableHead className="text-xs text-muted-foreground">
+                    {t("common.created")}
+                  </TableHead>
                   <TableHead className="text-right">{t("common.actions")}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -164,6 +167,9 @@ export default async function SettlementsPage({
                         <Badge variant={s.paidAt ? "success" : "warning"}>
                           {t(`settlements.status.${s.paidAt ? "PAID" : "UNPAID"}`)}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {formatDate(s.createdAt, locale)}
                       </TableCell>
                       <TableCell className="text-right">
                         <SettlementRowActions

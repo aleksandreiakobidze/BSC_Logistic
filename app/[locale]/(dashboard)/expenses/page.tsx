@@ -228,6 +228,9 @@ export default async function ExpensesPage({
                   <TableHead>Scope</TableHead>
                   <TableHead>Vendor</TableHead>
                   <TableHead className="text-right">{t("common.amount")}</TableHead>
+                  <TableHead className="text-xs text-muted-foreground">
+                    {t("common.created")}
+                  </TableHead>
                   <TableHead className="w-20" />
                 </TableRow>
               </TableHeader>
@@ -255,6 +258,9 @@ export default async function ExpensesPage({
                       <TableCell className="text-muted-foreground">{e.vendor ?? "—"}</TableCell>
                       <TableCell className="text-right font-mono font-medium">
                         {formatCurrency(Number(e.amount), e.currency, locale)}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {formatDate(e.createdAt, locale)}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">

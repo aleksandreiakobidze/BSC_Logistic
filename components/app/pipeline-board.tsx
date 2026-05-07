@@ -20,8 +20,15 @@ import {
 } from "./lead-priority-badge";
 import { formatCurrency } from "@/lib/utils";
 import { updateLeadStatus } from "@/app/[locale]/(dashboard)/leads/actions";
+import {
+  checkLeadTransition,
+  type LeadForCheck,
+  type TransitionTarget,
+} from "@/lib/lead-transitions";
+import { LeadStatus } from "@/lib/enums";
 import { Building2, Calendar } from "lucide-react";
 import { format } from "date-fns";
+import { useRouter } from "next/navigation";
 
 type PipelineLead = {
   id: string;
@@ -34,18 +41,42 @@ type PipelineLead = {
   nextFollowUp: Date | null;
   priority: string;
   score: number;
+  contactId: string | null;
+  customerId: string | null;
+  contact: {
+    name: string | null;
+    phone: string | null;
+    email: string | null;
+  } | null;
   assignedTo: { name: string | null } | null;
 };
 
-const COLUMNS = [
-  "NEW",
-  "CONTACTED",
-  "QUALIFIED",
-  "PROPOSAL_SENT",
-  "NEGOTIATION",
-  "WON",
-  "LOST",
+const COLUMNS: LeadStatus[] = [
+  LeadStatus.NEW,
+  LeadStatus.CONTACTED,
+  LeadStatus.QUALIFIED,
+  LeadStatus.LOST,
 ];
+
+function transitionErrorKey(
+  err: ReturnType<typeof checkLeadTransition>,
+): string {
+  if (err.ok) return "";
+  switch (err.error.code) {
+    case "INVALID_TRANSITION":
+      return "leads.transition.errors.INVALID_TRANSITION";
+    case "LEAD_TERMINAL":
+      return "leads.transition.errors.LEAD_TERMINAL";
+    case "CONTACT_REQUIRED":
+      return "leads.transition.errors.CONTACT_REQUIRED";
+    case "CONTACT_INVALID":
+      return err.error.reason === "name"
+        ? "leads.transition.errors.CONTACT_INVALID_NAME"
+        : "leads.transition.errors.CONTACT_INVALID_PHONE_OR_EMAIL";
+    case "CUSTOMER_REQUIRED":
+      return "leads.transition.errors.CUSTOMER_REQUIRED";
+  }
+}
 
 export function PipelineBoard({
   leads: initialLeads,
@@ -54,8 +85,14 @@ export function PipelineBoard({
   leads: PipelineLead[];
   locale: string;
 }) {
+  const t = useTranslations();
+  const router = useRouter();
   const [leads, setLeads] = React.useState(initialLeads);
   const [activeId, setActiveId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    setLeads(initialLeads);
+  }, [initialLeads]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -74,12 +111,90 @@ export function PipelineBoard({
     const lead = leads.find((l) => l.id === active.id);
     if (!lead || lead.status === newStatus) return;
 
+    const target = newStatus as TransitionTarget;
+    if (
+      target !== LeadStatus.CONTACTED &&
+      target !== LeadStatus.QUALIFIED &&
+      target !== LeadStatus.LOST
+    ) {
+      // NEW is creation-only; nothing else exists.
+      toast.error(
+        t("leads.transition.errors.INVALID_TRANSITION", {
+          from: lead.status,
+          to: newStatus,
+        }),
+      );
+      return;
+    }
+
+    const leadForCheck: LeadForCheck = {
+      status: lead.status as LeadStatus,
+      contactId: lead.contactId,
+      customerId: lead.customerId,
+      contact: lead.contact,
+    };
+    const check = checkLeadTransition(leadForCheck, target);
+
+    // Soft-handle gates by routing the user to the inline fix flow on the
+    // detail page rather than a hard-fail toast.
+    if (!check.ok) {
+      if (
+        target === LeadStatus.CONTACTED &&
+        (check.error.code === "CONTACT_REQUIRED" ||
+          check.error.code === "CONTACT_INVALID")
+      ) {
+        toast.message(t("leads.transition.errors.CONTACT_REQUIRED"));
+        router.push(`/leads/${lead.id}?action=contact`);
+        return;
+      }
+      if (
+        target === LeadStatus.QUALIFIED &&
+        (check.error.code === "CONTACT_REQUIRED" ||
+          check.error.code === "CONTACT_INVALID" ||
+          check.error.code === "CUSTOMER_REQUIRED")
+      ) {
+        toast.message(t("leads.transition.errors.CUSTOMER_REQUIRED"));
+        router.push(`/leads/${lead.id}?action=qualify`);
+        return;
+      }
+      const key = transitionErrorKey(check);
+      const params =
+        check.error.code === "INVALID_TRANSITION"
+          ? { from: check.error.from, to: check.error.to }
+          : undefined;
+      toast.error(t(key, params as never));
+      return;
+    }
+
+    // LOST requires a reason — bounce to detail page for the dialog.
+    if (target === LeadStatus.LOST) {
+      router.push(`/leads/${lead.id}?action=lost`);
+      return;
+    }
+
     setLeads((prev) =>
       prev.map((l) => (l.id === lead.id ? { ...l, status: newStatus } : l)),
     );
 
     try {
-      await updateLeadStatus(lead.id, newStatus);
+      const res = await updateLeadStatus({
+        leadId: lead.id,
+        nextStatus: target,
+      });
+      if (!res.ok) {
+        const key =
+          res.error.code === "LOST_REASON_REQUIRED"
+            ? "leads.transition.errors.LOST_REASON_REQUIRED"
+            : transitionErrorKey({ ok: false, error: res.error });
+        toast.error(t(key));
+        setLeads((prev) =>
+          prev.map((l) =>
+            l.id === lead.id ? { ...l, status: lead.status } : l,
+          ),
+        );
+        return;
+      }
+      router.refresh();
     } catch {
       setLeads((prev) =>
         prev.map((l) => (l.id === lead.id ? { ...l, status: lead.status } : l)),
@@ -94,6 +209,9 @@ export function PipelineBoard({
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
     >
+      <div className="mb-3 rounded-lg border border-dashed bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground">
+        {t("leads.kanbanBanner")}
+      </div>
       <div className="flex gap-3 overflow-x-auto pb-4">
         {COLUMNS.map((col) => (
           <Column

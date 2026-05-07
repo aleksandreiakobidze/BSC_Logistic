@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { requireOrg, requireRole } from "@/lib/actions";
+import { requireRole } from "@/lib/actions";
 import { audit } from "@/lib/audit";
 import { staffRoles } from "@/lib/rbac";
 import {
@@ -12,17 +12,26 @@ import {
   LeadPriority,
   CustomerStatus,
 } from "@/lib/enums";
+import {
+  checkLeadTransition,
+  type LeadForCheck,
+  type TransitionError,
+} from "@/lib/lead-transitions";
 import { CustomFieldEntity } from "@/lib/custom-fields";
 import { saveCustomFieldValues } from "../settings/custom-fields/actions";
 
 const PRIORITY_VALUES = Object.values(LeadPriority) as [string, ...string[]];
 
-const leadSchema = z.object({
+const STATUS_VALUES = Object.values(LeadStatus) as [string, ...string[]];
+
+// New leads always start NEW. Status field is intentionally omitted from the
+// create/update schema; lifecycle transitions go through `updateLeadStatus`
+// (which enforces the state machine) and `qualifyLead`.
+const leadCreateSchema = z.object({
   name: z.string().min(1),
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().optional(),
   company: z.string().optional(),
-  status: z.string().default(LeadStatus.NEW),
   source: z.string().optional(),
   assignedToId: z.string().optional(),
   contactId: z.string().optional(),
@@ -32,13 +41,20 @@ const leadSchema = z.object({
   priority: z.enum(PRIORITY_VALUES).optional(),
   nextFollowUp: z.string().optional(),
   notes: z.string().optional(),
+});
+
+// Edit form preserves status only for LOST leads (so the lostReason can be
+// updated without forcing a new status change). Status changes go through
+// `updateLeadStatus`.
+const leadUpdateSchema = leadCreateSchema.extend({
+  status: z.enum(STATUS_VALUES).optional(),
   lostReason: z.string().optional(),
 });
 
 export async function createLead(formData: FormData) {
   const { session, orgId } = await requireRole(staffRoles);
   const raw = Object.fromEntries(formData.entries());
-  const data = leadSchema.parse(raw);
+  const data = leadCreateSchema.parse(raw);
 
   if (data.contactId) {
     await prisma.contact.findFirstOrThrow({
@@ -54,7 +70,7 @@ export async function createLead(formData: FormData) {
       email: data.email || null,
       phone: data.phone || null,
       company: data.company || null,
-      status: data.status,
+      status: LeadStatus.NEW,
       source: data.source || null,
       assignedToId: data.assignedToId || null,
       contactId: data.contactId || null,
@@ -64,8 +80,6 @@ export async function createLead(formData: FormData) {
       priority: data.priority ?? LeadPriority.MEDIUM,
       nextFollowUp: data.nextFollowUp ? new Date(data.nextFollowUp) : null,
       notes: data.notes || null,
-      lostReason:
-        data.status === LeadStatus.LOST ? data.lostReason || null : null,
     },
   });
   await saveCustomFieldValues({
@@ -80,7 +94,7 @@ export async function createLead(formData: FormData) {
       leadId: lead.id,
       userId: session.user.id,
       kind: ActivityKind.STATUS_CHANGE,
-      note: `Lead created with status ${data.status}`,
+      note: `Lead created (NEW)`,
     },
   });
 
@@ -99,7 +113,7 @@ export async function createLead(formData: FormData) {
 export async function updateLead(id: string, formData: FormData) {
   const { session, orgId } = await requireRole(staffRoles);
   const raw = Object.fromEntries(formData.entries());
-  const data = leadSchema.parse(raw);
+  const data = leadUpdateSchema.parse(raw);
 
   const existing = await prisma.lead.findFirstOrThrow({ where: { id, orgId } });
 
@@ -117,7 +131,7 @@ export async function updateLead(id: string, formData: FormData) {
       email: data.email || null,
       phone: data.phone || null,
       company: data.company || null,
-      status: data.status,
+      // Status is intentionally NOT writable here. Use updateLeadStatus / qualifyLead.
       source: data.source || null,
       assignedToId: data.assignedToId || null,
       contactId: data.contactId || null,
@@ -127,8 +141,11 @@ export async function updateLead(id: string, formData: FormData) {
       priority: data.priority ?? existing.priority,
       nextFollowUp: data.nextFollowUp ? new Date(data.nextFollowUp) : null,
       notes: data.notes || null,
+      // Allow editing the lostReason text on already-LOST leads.
       lostReason:
-        data.status === LeadStatus.LOST ? data.lostReason || null : null,
+        existing.status === LeadStatus.LOST
+          ? data.lostReason ?? existing.lostReason ?? null
+          : existing.lostReason,
     },
   });
   await saveCustomFieldValues({
@@ -137,20 +154,6 @@ export async function updateLead(id: string, formData: FormData) {
     recordId: lead.id,
     formData,
   });
-
-  if (existing.status !== data.status) {
-    await prisma.leadActivity.create({
-      data: {
-        leadId: id,
-        userId: session.user.id,
-        kind: ActivityKind.STATUS_CHANGE,
-        note:
-          data.status === LeadStatus.LOST && data.lostReason
-            ? `Status changed from ${existing.status} to ${data.status}: ${data.lostReason}`
-            : `Status changed from ${existing.status} to ${data.status}`,
-      },
-    });
-  }
 
   await audit({
     action: "lead.update",
@@ -165,33 +168,129 @@ export async function updateLead(id: string, formData: FormData) {
   return { ok: true };
 }
 
-export async function updateLeadStatus(id: string, status: string) {
+const updateLeadStatusSchema = z.object({
+  leadId: z.string().min(1),
+  nextStatus: z.enum([
+    LeadStatus.CONTACTED,
+    LeadStatus.QUALIFIED,
+    LeadStatus.LOST,
+  ]),
+  lostReason: z.string().max(500).optional(),
+  // Optional: attach a contact at the same time (used by the
+  // "Mark Contacted" flow when the user adds a contact inline).
+  attachContactId: z.string().min(1).optional(),
+});
+
+export type UpdateLeadStatusInput = z.input<typeof updateLeadStatusSchema>;
+
+export type UpdateLeadStatusResult =
+  | { ok: true; lead: { id: string; status: string } }
+  | {
+      ok: false;
+      error: TransitionError | { code: "LOST_REASON_REQUIRED" };
+    };
+
+export async function updateLeadStatus(
+  input: UpdateLeadStatusInput,
+): Promise<UpdateLeadStatusResult> {
   const { session, orgId } = await requireRole(staffRoles);
+  const data = updateLeadStatusSchema.parse(input);
 
-  const existing = await prisma.lead.findFirstOrThrow({ where: { id, orgId } });
+  return prisma.$transaction(async (tx) => {
+    let lead = await tx.lead.findFirstOrThrow({
+      where: { id: data.leadId, orgId },
+      include: { contact: true },
+    });
 
-  await prisma.lead.update({ where: { id }, data: { status } });
+    if (data.attachContactId) {
+      const ct = await tx.contact.findFirstOrThrow({
+        where: { id: data.attachContactId, orgId },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          email: true,
+          customerId: true,
+        },
+      });
+      if (lead.contactId !== ct.id) {
+        lead = await tx.lead.update({
+          where: { id: lead.id },
+          data: { contactId: ct.id },
+          include: { contact: true },
+        });
+      }
+    }
 
-  await prisma.leadActivity.create({
-    data: {
-      leadId: id,
+    const leadForCheck: LeadForCheck = {
+      status: lead.status as LeadStatus,
+      contactId: lead.contactId,
+      customerId: lead.customerId,
+      contact: lead.contact
+        ? {
+            name: lead.contact.name,
+            phone: lead.contact.phone,
+            email: lead.contact.email,
+          }
+        : null,
+    };
+
+    const check = checkLeadTransition(leadForCheck, data.nextStatus);
+    if (!check.ok) {
+      return { ok: false, error: check.error } as const;
+    }
+
+    if (data.nextStatus === LeadStatus.LOST && !data.lostReason?.trim()) {
+      return {
+        ok: false,
+        error: { code: "LOST_REASON_REQUIRED" },
+      } as const;
+    }
+
+    const updated = await tx.lead.update({
+      where: { id: lead.id },
+      data: {
+        status: data.nextStatus,
+        lostReason:
+          data.nextStatus === LeadStatus.LOST
+            ? data.lostReason ?? null
+            : null,
+      },
+    });
+
+    await tx.leadActivity.create({
+      data: {
+        leadId: lead.id,
+        userId: session.user.id,
+        kind: ActivityKind.STATUS_CHANGE,
+        note:
+          data.nextStatus === LeadStatus.LOST && data.lostReason
+            ? `Status: ${lead.status} → ${data.nextStatus} (${data.lostReason})`
+            : `Status: ${lead.status} → ${data.nextStatus}`,
+      },
+    });
+
+    await audit({
+      action: "lead.updateStatus",
+      entity: "Lead",
+      entityId: lead.id,
+      orgId,
       userId: session.user.id,
-      kind: ActivityKind.STATUS_CHANGE,
-      note: `Status changed from ${existing.status} to ${status}`,
-    },
-  });
+      meta: {
+        from: lead.status,
+        to: data.nextStatus,
+        reason: data.lostReason,
+      },
+    });
 
-  await audit({
-    action: "lead.status",
-    entity: "Lead",
-    entityId: id,
-    orgId,
-    userId: session.user.id,
-    meta: { from: existing.status, to: status },
-  });
+    revalidatePath("/leads");
+    revalidatePath(`/leads/${lead.id}`);
 
-  revalidatePath("/leads");
-  revalidatePath(`/leads/${id}`);
+    return {
+      ok: true,
+      lead: { id: updated.id, status: updated.status },
+    } as const;
+  });
 }
 
 export async function deleteLead(id: string) {
@@ -224,37 +323,75 @@ const customerInputSchema = z.object({
   notes: z.string().optional().nullable(),
 });
 
-const contactInputSchema = z.object({
-  name: z.string().min(1),
-  email: z.string().email().optional().or(z.literal("")).nullable(),
-  phone: z.string().optional().nullable(),
-  position: z.string().optional().nullable(),
-  company: z.string().optional().nullable(),
-});
+const contactInputSchema = z
+  .object({
+    name: z.string().min(1),
+    email: z.string().email().optional().or(z.literal("")).nullable(),
+    phone: z.string().optional().nullable(),
+    position: z.string().optional().nullable(),
+    company: z.string().optional().nullable(),
+  })
+  .refine(
+    (c) => !!c.phone?.toString().trim() || !!c.email?.toString().trim(),
+    { message: "Either phone or email is required", path: ["phone"] },
+  );
 
+// Qualification always requires both a customer (link or create) and a
+// contact (link or create). The legacy "skip contact" branch is intentionally
+// removed: a QUALIFIED lead must have a real point-of-contact.
 const qualifyLeadSchema = z.object({
   customer: z.discriminatedUnion("strategy", [
     z.object({ strategy: z.literal("link"), customerId: z.string().min(1) }),
     z.object({ strategy: z.literal("create"), data: customerInputSchema }),
   ]),
-  contact: z
-    .discriminatedUnion("strategy", [
-      z.object({ strategy: z.literal("skip") }),
-      z.object({ strategy: z.literal("link"), contactId: z.string().min(1) }),
-      z.object({ strategy: z.literal("create"), data: contactInputSchema }),
-    ])
-    .default({ strategy: "skip" } as const),
+  contact: z.discriminatedUnion("strategy", [
+    z.object({ strategy: z.literal("link"), contactId: z.string().min(1) }),
+    z.object({ strategy: z.literal("create"), data: contactInputSchema }),
+  ]),
 });
 
 export type QualifyLeadInput = z.input<typeof qualifyLeadSchema>;
 
-export async function qualifyLead(id: string, input: QualifyLeadInput) {
+export type QualifyLeadResult =
+  | { ok: true; customerId: string; contactId: string }
+  | {
+      ok: false;
+      error:
+        | { code: "LEAD_NOT_QUALIFIABLE"; currentStatus: string }
+        | { code: "VALIDATION"; message: string };
+    };
+
+export async function qualifyLead(
+  id: string,
+  input: QualifyLeadInput,
+): Promise<QualifyLeadResult> {
   const { session, orgId } = await requireRole(staffRoles);
-  const opts = qualifyLeadSchema.parse(input);
+  const parsed = qualifyLeadSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: {
+        code: "VALIDATION",
+        message: parsed.error.issues[0]?.message ?? "Invalid input",
+      },
+    };
+  }
+  const opts = parsed.data;
+
   const lead = await prisma.lead.findFirstOrThrow({
     where: { id, orgId },
     include: { contact: true },
   });
+
+  if (
+    lead.status === LeadStatus.LOST ||
+    lead.status === LeadStatus.QUALIFIED
+  ) {
+    return {
+      ok: false,
+      error: { code: "LEAD_NOT_QUALIFIABLE", currentStatus: lead.status },
+    };
+  }
 
   const result = await prisma.$transaction(async (tx) => {
     let customerId: string;
@@ -283,7 +420,7 @@ export async function qualifyLead(id: string, input: QualifyLeadInput) {
       customerId = created.id;
     }
 
-    let contactId: string | null = lead.contactId;
+    let contactId: string;
     if (opts.contact.strategy === "link") {
       const c = await tx.contact.findFirstOrThrow({
         where: { id: opts.contact.contactId, orgId },
@@ -296,7 +433,7 @@ export async function qualifyLead(id: string, input: QualifyLeadInput) {
         });
       }
       contactId = c.id;
-    } else if (opts.contact.strategy === "create") {
+    } else {
       const created = await tx.contact.create({
         data: {
           orgId,
@@ -304,19 +441,11 @@ export async function qualifyLead(id: string, input: QualifyLeadInput) {
           name: opts.contact.data.name,
           email: opts.contact.data.email || null,
           phone: opts.contact.data.phone || null,
-          position: opts.contact.data.position || null,
+          jobTitle: opts.contact.data.position || null,
           company: opts.contact.data.company || null,
         },
       });
       contactId = created.id;
-    } else if (lead.contact && !lead.contact.customerId) {
-      // No explicit contact strategy, but the lead already had a contact —
-      // attach it to the new customer for continuity.
-      await tx.contact.update({
-        where: { id: lead.contact.id },
-        data: { customerId },
-      });
-      contactId = lead.contact.id;
     }
 
     await tx.lead.update({
@@ -337,7 +466,7 @@ export async function qualifyLead(id: string, input: QualifyLeadInput) {
       leadId: id,
       userId: session.user.id,
       kind: ActivityKind.STATUS_CHANGE,
-      note: `Lead qualified — linked to customer`,
+      note: `Qualified — Customer: ${result.customerId}, Contact: ${result.contactId}`,
     },
   });
 
@@ -347,7 +476,12 @@ export async function qualifyLead(id: string, input: QualifyLeadInput) {
     entityId: id,
     orgId,
     userId: session.user.id,
-    meta: { customerId: result.customerId, contactId: result.contactId },
+    meta: {
+      customerStrategy: opts.customer.strategy,
+      contactStrategy: opts.contact.strategy,
+      customerId: result.customerId,
+      contactId: result.contactId,
+    },
   });
 
   revalidatePath("/leads");
@@ -361,9 +495,10 @@ export async function qualifyLead(id: string, input: QualifyLeadInput) {
 }
 
 /**
- * Backward-compatible wrapper for the legacy `convertToCustomer` flow.
- * The new canonical entry point is `qualifyLead` which leaves Lead in
- * `QUALIFIED` (not `WON`), and creates a Quotation in a separate step.
+ * Legacy wrapper for the old "convert to customer" button. Routes through
+ * `qualifyLead`. If the lead has neither contact info, it fabricates a
+ * minimal contact (the legacy code path always created one) so the new
+ * "contact required" gate is satisfied.
  */
 export async function convertToCustomer(
   id: string,
@@ -372,7 +507,15 @@ export async function convertToCustomer(
   const { orgId } = await requireRole(staffRoles);
   const lead = await prisma.lead.findFirstOrThrow({
     where: { id, orgId },
-    select: { id: true, name: true, company: true, email: true, phone: true, notes: true, contactId: true },
+    select: {
+      id: true,
+      name: true,
+      company: true,
+      email: true,
+      phone: true,
+      notes: true,
+      contactId: true,
+    },
   });
 
   void options; // legacy `createOrder` flag is ignored; quotations are now their own flow
@@ -387,7 +530,7 @@ export async function convertToCustomer(
       },
     },
     contact: lead.contactId
-      ? { strategy: "skip" }
+      ? { strategy: "link", contactId: lead.contactId }
       : {
           strategy: "create",
           data: {
@@ -399,7 +542,10 @@ export async function convertToCustomer(
         },
   });
 
-  return { ok: res.ok, customerId: res.customerId, orderId: null };
+  if (!res.ok) {
+    return { ok: false, error: res.error, customerId: null, orderId: null };
+  }
+  return { ok: true, customerId: res.customerId, orderId: null };
 }
 
 export async function addActivity(leadId: string, formData: FormData) {

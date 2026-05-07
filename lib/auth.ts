@@ -44,6 +44,11 @@ const credentialsSchema = z.object({
 export const { handlers, signIn, signOut, auth } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
+  // Behind ACA's envoy proxy the upstream Host header is rewritten to
+  // `0.0.0.0:3000`, so Auth.js's strict origin check throws `UntrustedHost`
+  // on every /api/auth/* request unless we explicitly trust the proxy.
+  // Same flag also makes preview deployments work without per-env URL config.
+  trustHost: true,
   pages: {
     signIn: "/login",
   },

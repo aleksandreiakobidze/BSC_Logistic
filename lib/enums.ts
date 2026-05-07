@@ -139,9 +139,6 @@ export const LeadStatus = {
   NEW: "NEW",
   CONTACTED: "CONTACTED",
   QUALIFIED: "QUALIFIED",
-  PROPOSAL_SENT: "PROPOSAL_SENT",
-  NEGOTIATION: "NEGOTIATION",
-  WON: "WON",
   LOST: "LOST",
 } as const;
 export type LeadStatus = (typeof LeadStatus)[keyof typeof LeadStatus];
@@ -180,7 +177,29 @@ export const CustomerStatus = {
 } as const;
 export type CustomerStatus = (typeof CustomerStatus)[keyof typeof CustomerStatus];
 
+export const ContactStatus = {
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE",
+  SUSPENDED: "SUSPENDED",
+} as const;
+export type ContactStatus = (typeof ContactStatus)[keyof typeof ContactStatus];
+
+export const ContactRelationshipType = {
+  DRIVER: "DRIVER",
+  SHIPPING_LINE: "SHIPPING_LINE",
+  AIRLINE: "AIRLINE",
+  CUSTOMS_BROKER: "CUSTOMS_BROKER",
+  WAREHOUSE_3PL: "WAREHOUSE_3PL",
+  COURIER_EXPRESS: "COURIER_EXPRESS",
+  INSURANCE_PROVIDER: "INSURANCE_PROVIDER",
+  INTERNAL_CONTACT: "INTERNAL_CONTACT",
+  NETWORK_PARTNER: "NETWORK_PARTNER",
+  OTHER: "OTHER",
+} as const;
+export type ContactRelationshipType = (typeof ContactRelationshipType)[keyof typeof ContactRelationshipType];
+
 export const QuotationStatus = {
+  PRICING: "PRICING",
   DRAFT: "DRAFT",
   SENT: "SENT",
   COUNTERED: "COUNTERED",
@@ -189,5 +208,71 @@ export const QuotationStatus = {
   EXPIRED: "EXPIRED",
   CONVERTED: "CONVERTED",
   CANCELLED: "CANCELLED",
+  WON: "WON",
+  LOST: "LOST",
 } as const;
 export type QuotationStatus = (typeof QuotationStatus)[keyof typeof QuotationStatus];
+
+export const SupplierType = {
+  SHIPPING_LINE: "SHIPPING_LINE",
+  AIRLINE: "AIRLINE",
+  CUSTOMS_BROKER: "CUSTOMS_BROKER",
+  WAREHOUSE_3PL: "WAREHOUSE_3PL",
+  COURIER_EXPRESS: "COURIER_EXPRESS",
+  ROAD_CARRIER: "ROAD_CARRIER",
+  RAIL_CARRIER: "RAIL_CARRIER",
+  OTHER: "OTHER",
+} as const;
+export type SupplierType = (typeof SupplierType)[keyof typeof SupplierType];
+
+export const SupplierStatus = {
+  ACTIVE: "ACTIVE",
+  INACTIVE: "INACTIVE",
+  SUSPENDED: "SUSPENDED",
+} as const;
+export type SupplierStatus = (typeof SupplierStatus)[keyof typeof SupplierStatus];
+
+export const QuotationTeam = {
+  SEA: "SEA",
+  LAND: "LAND",
+  AIR: "AIR",
+  CUSTOMS: "CUSTOMS",
+  WAREHOUSE: "WAREHOUSE",
+  OTHER: "OTHER",
+} as const;
+export type QuotationTeam = (typeof QuotationTeam)[keyof typeof QuotationTeam];
+
+export const SupplierOfferStatus = {
+  DRAFT: "DRAFT",
+  REQUESTED: "REQUESTED",
+  RECEIVED: "RECEIVED",
+  SELECTED: "SELECTED",
+  REJECTED: "REJECTED",
+} as const;
+export type SupplierOfferStatus = (typeof SupplierOfferStatus)[keyof typeof SupplierOfferStatus];
+
+export const Incoterms = {
+  EXW: "EXW",
+  FCA: "FCA",
+  CPT: "CPT",
+  CIP: "CIP",
+  DAP: "DAP",
+  DPU: "DPU",
+  DDP: "DDP",
+  FAS: "FAS",
+  FOB: "FOB",
+  CFR: "CFR",
+  CIF: "CIF",
+} as const;
+export type Incoterms = (typeof Incoterms)[keyof typeof Incoterms];
+
+export const QuotationActivityKind = {
+  NOTE: "NOTE",
+  EMAIL: "EMAIL",
+  CALL: "CALL",
+  MEETING: "MEETING",
+  STATUS_CHANGE: "STATUS_CHANGE",
+  SUPPLIER_OFFER: "SUPPLIER_OFFER",
+  RFQ_SENT: "RFQ_SENT",
+} as const;
+export type QuotationActivityKind = (typeof QuotationActivityKind)[keyof typeof QuotationActivityKind];

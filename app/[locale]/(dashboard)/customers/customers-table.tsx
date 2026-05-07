@@ -17,14 +17,22 @@ import {
   type ColumnDescriptor,
   type ColumnPrefs,
 } from "@/components/app/data-table-columns-button";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 import {
   CustomFieldType,
   type CustomFieldDefinitionView,
   type CustomFieldValueMap,
 } from "@/lib/custom-fields";
 
-const FIXED_COLUMN_IDS = ["name", "email", "phone", "orders", "invoices", "credit"] as const;
+const FIXED_COLUMN_IDS = [
+  "name",
+  "email",
+  "phone",
+  "orders",
+  "invoices",
+  "credit",
+  "created",
+] as const;
 type FixedColId = (typeof FIXED_COLUMN_IDS)[number];
 
 type FixedLabels = Record<FixedColId, string>;
@@ -38,6 +46,7 @@ export type CustomerRow = {
   orderCount: number;
   invoiceCount: number;
   creditLimit: number;
+  createdAt: string;
   cf: CustomFieldValueMap;
 };
 
@@ -159,7 +168,8 @@ export function CustomersTable({
 
 function cellClass(id: string): string {
   if (id === "credit") return "text-right font-mono text-sm";
-  if (id === "email" || id === "phone") return "text-muted-foreground";
+  if (id === "email" || id === "phone" || id === "created")
+    return "text-muted-foreground text-xs";
   return "";
 }
 
@@ -195,6 +205,8 @@ function renderCell(
       return c.invoiceCount;
     case "credit":
       return formatCurrency(c.creditLimit, baseCurrency, locale);
+    case "created":
+      return formatDate(c.createdAt, locale);
     default:
       if (id.startsWith("cf:")) {
         const key = id.slice(3);

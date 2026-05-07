@@ -174,11 +174,12 @@ async function main() {
   );
 
   // Contacts — 2 per customer (24 total)
+  let contactIdx = 0;
   for (const c of customers) {
     await prisma.contact.createMany({
       data: [
-        { orgId: org.id, customerId: c.id, name: "Ops Manager", position: "Operations", email: `ops-${c.code}@example.com`, phone: "+995 555 20 20 20" },
-        { orgId: org.id, customerId: c.id, name: "Accounts Payable", position: "Finance", email: `ap-${c.code}@example.com`, phone: "+995 555 30 30 30" },
+        { orgId: org.id, customerId: c.id, name: "Ops Manager", jobTitle: "Operations", email: `ops-${c.code}@example.com`, phone: "+995 555 20 20 20", code: `CNT-${String(++contactIdx).padStart(6, "0")}` },
+        { orgId: org.id, customerId: c.id, name: "Accounts Payable", jobTitle: "Finance", email: `ap-${c.code}@example.com`, phone: "+995 555 30 30 30", code: `CNT-${String(++contactIdx).padStart(6, "0")}` },
       ],
     });
   }

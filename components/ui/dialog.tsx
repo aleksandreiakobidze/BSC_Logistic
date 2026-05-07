@@ -27,14 +27,18 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 type DialogContentProps = React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
   /**
-   * Optional screen-reader-only description (renders Radix `DialogDescription`).
+   * Optional screen-reader-only description shown when the dialog does not
+   * render its own `<DialogDescription>`.
    */
   description?: React.ReactNode;
   /**
-   * Set `true` when this dialog’s children include `<DialogDescription>` so
-   * `aria-describedby` stays linked to that node. When `false` (default), this
-   * wrapper renders a screen-reader-only description so Radix's accessibility
-   * check has a real target and doesn't emit a dev-overlay console error.
+   * Set `true` when this dialog's children render their own
+   * `<DialogDescription>`. When `false` (default), this wrapper renders a
+   * screen-reader-only description so Radix's accessibility check always has
+   * a target and doesn't emit a dev-overlay console warning.
+   *
+   * Either path lets Radix manage the `aria-describedby` linkage via its own
+   * id context, so we never fight Radix's auto-ids.
    */
   withDescription?: boolean;
 };
@@ -43,18 +47,6 @@ const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   DialogContentProps
 >(({ className, children, description, withDescription = false, ...props }, ref) => {
-  const { "aria-describedby": ariaDescribedByProp, ...restProps } = props;
-  const generatedDescriptionId = React.useId();
-
-  const ariaDescribedBy =
-    ariaDescribedByProp !== undefined
-      ? ariaDescribedByProp
-      : withDescription
-        ? undefined
-        : generatedDescriptionId;
-  const shouldRenderGeneratedDescription =
-    !withDescription && ariaDescribedByProp === undefined;
-
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -65,11 +57,10 @@ const DialogContent = React.forwardRef<
           "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]",
           className,
         )}
-        {...restProps}
-        aria-describedby={ariaDescribedBy}
+        {...props}
       >
-        {shouldRenderGeneratedDescription && (
-          <DialogPrimitive.Description id={generatedDescriptionId} className="sr-only">
+        {!withDescription && (
+          <DialogPrimitive.Description className="sr-only">
             {description ?? "Dialog content"}
           </DialogPrimitive.Description>
         )}

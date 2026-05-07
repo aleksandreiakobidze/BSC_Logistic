@@ -59,10 +59,12 @@ model Organization {
   payments               Payment[]
   settlements            Settlement[]
   quotations             Quotation[]
+  suppliers              Supplier[]
   customFieldDefinitions CustomFieldDefinition[]
   customFieldValues      CustomFieldValue[]
   customFieldGroups      CustomFieldGroup[]
   importFieldConfigs     ImportFieldConfig[]
+  contactLookupValues    ContactLookupValue[]
 }
 
 model CustomFieldDefinition {
@@ -202,8 +204,11 @@ model User {
   assignedLeadTasks          LeadTask[]          @relation("AssignedLeadTasks")
   createdPayments            Payment[]           @relation("CreatedPayments")
   ownedQuotations            Quotation[]         @relation("OwnedQuotations")
+  salesManagedQuotations     Quotation[]         @relation("SalesManagedQuotations")
   authoredQuotationRevisions QuotationRevision[] @relation("AuthoredQuotationRevisions")
   authoredQuotationMessages  QuotationMessage[]  @relation("AuthoredQuotationMessages")
+  ownedSuppliers             Supplier[]          @relation("OwnedSuppliers")
+  managedSupplierOffers      SupplierOffer[]     @relation("ManagedSupplierOffers")
 
   @@index([orgId])
   @@index([role])
@@ -298,25 +303,45 @@ model Customer {
 }
 
 model Contact {
-  id         String   @id @default(cuid())
-  orgId      String
-  customerId String?
-  name       String
-  position   String?
-  email      String?
-  phone      String?
-  company    String?
-  notes      String?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id               String   @id @default(cuid())
+  orgId            String
+  code             String   @default("")
+  customerId       String?
+  name             String
+  jobTitle         String?
+  email            String?
+  phone            String?
+  company          String?
+  taxId            String?
+  industry         String?
+  status           String   @default("ACTIVE")
+  relationshipType String   @default("OTHER")
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
   customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
   leads        Lead[]
   quotations   Quotation[]
 
+  @@unique([orgId, code])
   @@index([orgId])
   @@index([customerId])
+}
+
+model ContactLookupValue {
+  id        String   @id @default(cuid())
+  orgId     String
+  kind      String
+  value     String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, kind, value])
+  @@index([orgId, kind])
 }
 
 // ============================================================================
@@ -936,11 +961,12 @@ model Quotation {
   id           String    @id @default(cuid())
   orgId        String
   number       String
-  status       String    @default("DRAFT") // DRAFT | SENT | ACCEPTED | REJECTED | EXPIRED | CONVERTED | CANCELLED
+  status       String    @default("PRICING") // PRICING | DRAFT | SENT | COUNTERED | ACCEPTED | REJECTED | EXPIRED | CONVERTED | CANCELLED | WON | LOST
   customerId   String
   contactId    String?
   leadId       String?
   ownerId      String?
+  salesManagerId String?
   currency     String    @default("USD")
   subtotal     Decimal   @default(0) @db.Decimal(14, 2)
   taxRate      Decimal   @default(0) @db.Decimal(8, 4)
@@ -957,14 +983,37 @@ model Quotation {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  // RFQ / Inquiry fields
+  /// Comma-separated team codes (e.g. "SEA,LAND,CUSTOMS"). Mirrors `QuotationTeam` enum literals.
+  requestedTeams      String?
+  priority            String   @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT (mirrors LeadPriority)
+  mode                String?
+  incoterms           String?
+  originPort          String?
+  originAddress       String?
+  destinationPort     String?
+  destinationAddress  String?
+  cargoDescription    String?
+  shipmentDetails     String?
+  cargoValue          Decimal? @db.Decimal(14, 2)
+  cargoValueCurrency  String?
+  cargoReadyDate      DateTime?
+  specialRequirements String?
+  wonAt               DateTime?
+  lostAt              DateTime?
+  lostReason          String?
+
   organization    Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
   customer        Customer            @relation(fields: [customerId], references: [id])
   contact         Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
   lead            Lead?               @relation(fields: [leadId], references: [id], onDelete: SetNull)
   owner           User?               @relation("OwnedQuotations", fields: [ownerId], references: [id], onDelete: SetNull)
+  salesManager    User?               @relation("SalesManagedQuotations", fields: [salesManagerId], references: [id], onDelete: SetNull)
   lines           QuotationLine[]
   revisions       QuotationRevision[]
   messages        QuotationMessage[]
+  supplierOffers  SupplierOffer[]
+  activities      QuotationActivity[]
   convertedOrders Order[]             @relation("QuotationConvertedOrders")
 
   @@unique([orgId, number])
@@ -972,6 +1021,93 @@ model Quotation {
   @@index([customerId])
   @@index([leadId])
   @@index([ownerId])
+  @@index([salesManagerId])
+}
+
+// ============================================================================
+// Suppliers (carriers, brokers, 3PLs)
+// ============================================================================
+
+model Supplier {
+  id                     String   @id @default(cuid())
+  orgId                  String
+  code                   String?
+  name                   String
+  /// SHIPPING_LINE | AIRLINE | CUSTOMS_BROKER | WAREHOUSE_3PL | COURIER_EXPRESS | ROAD_CARRIER | RAIL_CARRIER | OTHER
+  type                   String   @default("OTHER")
+  status                 String   @default("ACTIVE") // ACTIVE | INACTIVE | SUSPENDED
+  email                  String?
+  phone                  String?
+  website                String?
+  taxId                  String?
+  address                String?
+  city                   String?
+  country                String?
+  currency               String   @default("USD")
+  paymentTerms           String?
+  defaultTransitTimeDays Int?
+  notes                  String?
+  ownerId                String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  owner        User?           @relation("OwnedSuppliers", fields: [ownerId], references: [id], onDelete: SetNull)
+  offers       SupplierOffer[]
+
+  @@unique([orgId, code])
+  @@index([orgId, status])
+  @@index([orgId, type])
+}
+
+model SupplierOffer {
+  id              String    @id @default(cuid())
+  quotationId     String
+  supplierId      String
+  /// SEA | LAND | AIR | CUSTOMS | WAREHOUSE | OTHER
+  team            String
+  managerUserId   String?
+  /// DRAFT | REQUESTED | RECEIVED | SELECTED | REJECTED
+  status          String    @default("DRAFT")
+  totalCost       Decimal   @default(0) @db.Decimal(14, 2)
+  currency        String    @default("USD")
+  transitTimeDays Int?
+  incoterms       String?
+  validUntil      DateTime?
+  terms           String?
+  notes           String?
+  isSelected      Boolean   @default(false)
+  requestedAt     DateTime?
+  receivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  supplier  Supplier  @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  manager   User?     @relation("ManagedSupplierOffers", fields: [managerUserId], references: [id], onDelete: SetNull)
+
+  @@index([quotationId])
+  @@index([supplierId])
+  @@index([quotationId, team, isSelected])
+}
+
+/// Free-form activity feed scoped to a Quotation. Mirrors `LeadActivity` so
+/// the inquiry tab can show notes, supplier-offer events, status changes,
+/// and outbound emails in a unified timeline.
+model QuotationActivity {
+  id          String   @id @default(cuid())
+  quotationId String
+  userId      String?
+  /// NOTE | EMAIL | CALL | MEETING | STATUS_CHANGE | SUPPLIER_OFFER | RFQ_SENT
+  kind        String
+  note        String?
+  /// JSON-serialised payload for structured events (e.g. supplier offer id).
+  meta        String?
+  at          DateTime @default(now())
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId, at])
 }
 
 model QuotationLine {
@@ -1076,6 +1212,7 @@ model Lead {
   notes          String?
   lostReason     String?
   convertedAt    DateTime?
+  wonAt          DateTime?
   customerId     String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -1094,6 +1231,7 @@ model Lead {
   @@index([assignedToId])
   @@index([contactId])
   @@index([priority])
+  @@index([wonAt])
 }
 
 model LeadActivity {

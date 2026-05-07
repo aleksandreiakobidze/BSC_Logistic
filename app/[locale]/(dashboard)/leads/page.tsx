@@ -24,20 +24,17 @@ import {
 import { PipelineBoard } from "@/components/app/pipeline-board";
 import { NewLeadButton } from "./new-lead-button";
 import { ExportButton } from "@/components/app/export-button";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDate } from "@/lib/utils";
 import { format } from "date-fns";
-import { LeadPriority } from "@/lib/enums";
+import { LeadPriority, LeadStatus } from "@/lib/enums";
 import { CustomFieldEntity } from "@/lib/custom-fields";
 import { getCustomFieldDefinitions } from "../settings/custom-fields/actions";
 
-const PIPELINE_STATUSES = [
-  "NEW",
-  "CONTACTED",
-  "QUALIFIED",
-  "PROPOSAL_SENT",
-  "NEGOTIATION",
-  "WON",
-  "LOST",
+const PIPELINE_STATUSES: LeadStatus[] = [
+  LeadStatus.NEW,
+  LeadStatus.CONTACTED,
+  LeadStatus.QUALIFIED,
+  LeadStatus.LOST,
 ];
 
 const PRIORITY_OPTIONS = Object.values(LeadPriority);
@@ -129,6 +126,7 @@ export default async function LeadsPage({
       orderBy,
       include: {
         assignedTo: { select: { id: true, name: true } },
+        contact: { select: { id: true, name: true, phone: true, email: true } },
         _count: { select: { activities: true, tasks: true } },
       },
     }),
@@ -160,9 +158,16 @@ export default async function LeadsPage({
     nextFollowUp: l.nextFollowUp,
     priority: l.priority,
     score: l.score,
-    assignedTo: l.assignedTo
-      ? { name: l.assignedTo.name }
+    contactId: l.contactId,
+    customerId: l.customerId,
+    contact: l.contact
+      ? {
+          name: l.contact.name,
+          phone: l.contact.phone,
+          email: l.contact.email,
+        }
       : null,
+    assignedTo: l.assignedTo ? { name: l.assignedTo.name } : null,
   }));
 
   const filterParams = new URLSearchParams();
@@ -213,7 +218,7 @@ export default async function LeadsPage({
 
         <TabsContent value="list" className="space-y-4">
           {/* Pipeline summary */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {PIPELINE_STATUSES.map((s) => (
               <Link
                 key={s}
@@ -255,6 +260,9 @@ export default async function LeadsPage({
                       <TableHead>{t("leads.nextFollowUp")}</TableHead>
                       <TableHead className="text-right">
                         {t("leads.estimatedValue")}
+                      </TableHead>
+                      <TableHead className="text-xs text-muted-foreground">
+                        {t("common.created")}
                       </TableHead>
                     </TableRow>
                   </TableHeader>
@@ -335,6 +343,9 @@ export default async function LeadsPage({
                               lead.currency,
                               locale,
                             )}
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {formatDate(lead.createdAt, locale)}
                           </TableCell>
                         </TableRow>
                       );

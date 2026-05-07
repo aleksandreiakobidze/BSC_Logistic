@@ -124,7 +124,7 @@ export async function updateOrderStatus(id: string, status: OrderStatus) {
     if (isConfirmingOrLater) {
       return applyOrderConfirmationSideEffects(tx, id);
     }
-    return { activatedCustomer: false, wonLead: false };
+    return { activatedCustomer: false, wonLead: false, wonQuotation: false };
   });
 
   await audit({
@@ -137,11 +137,13 @@ export async function updateOrderStatus(id: string, status: OrderStatus) {
       status,
       activatedCustomer: sideEffects.activatedCustomer,
       wonLead: sideEffects.wonLead,
+      wonQuotation: sideEffects.wonQuotation,
     },
   });
   revalidatePath("/orders");
   revalidatePath(`/orders/${id}`);
   if (sideEffects.activatedCustomer) revalidatePath("/customers");
   if (sideEffects.wonLead) revalidatePath("/leads");
+  if (sideEffects.wonQuotation) revalidatePath("/quotations");
   return { ok: true, ...sideEffects };
 }

@@ -106,13 +106,51 @@ export function QuotationActionPanel({
             icon={Send}
             label={t("quotations.actions.send")}
             busy={busyAction === "send"}
-            onClick={() =>
-              run(
-                "send",
-                () => sendQuotationEmail({ quotationId, locale }),
-                t("quotations.sentSuccess"),
-              )
-            }
+            onClick={async () => {
+              setBusyAction("send");
+              try {
+                const res = await sendQuotationEmail({
+                  quotationId,
+                  locale,
+                });
+                if (!res.ok) {
+                  const code = res.error.code;
+                  if (code === "NO_PORTAL_USER") {
+                    toast.error(
+                      tx(
+                        "quotations.errors.noPortalUser",
+                        "This customer has no portal access yet. Set up portal access on the customer page first.",
+                      ),
+                    );
+                  } else {
+                    toast.error(
+                      tx(
+                        "quotations.errors.invalidState",
+                        `Quotation cannot be sent from ${res.error.currentStatus}.`,
+                      ),
+                    );
+                  }
+                  return;
+                }
+                if (res.emailSent) {
+                  toast.success(t("quotations.sentSuccess"));
+                } else {
+                  toast.warning(
+                    tx(
+                      "quotations.emailDeliveryFailed",
+                      "Quotation marked as sent, but the email could not be delivered. Check the customer's portal access and email configuration.",
+                    ),
+                  );
+                }
+                router.refresh();
+              } catch (err) {
+                toast.error(
+                  err instanceof Error ? err.message : t("common.error"),
+                );
+              } finally {
+                setBusyAction(null);
+              }
+            }}
           />
         )}
         {status === QuotationStatus.COUNTERED && (
