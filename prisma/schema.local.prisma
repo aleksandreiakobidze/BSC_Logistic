@@ -1,0 +1,1269 @@
+// BSC Logistics database schema — SQLite local-dev variant
+//
+// DO NOT use this in production. The canonical schema is `prisma/schema.prisma`
+// (PostgreSQL). This file mirrors it with the minimum mechanical changes required
+// to run the Next.js app + `prisma db push` against `prisma/dev.db` (SQLite):
+//
+//   1. `provider = "sqlite"`.
+//   2. `generator client` keeps native binary only (no debian/rhel cross-targets).
+//   3. All `@db.Decimal(...)` annotations stripped (SQLite stores Decimal as TEXT).
+//   4. `onDelete: Restrict` → `onDelete: NoAction` (SQLite does not support Restrict
+//      in Prisma 5.22; `NoAction` is the closest equivalent for local dev).
+//
+// All model/field names are identical to `prisma/schema.prisma` so app code
+// compiles unchanged. Use the npm scripts in package.json:
+//   `npm run db:local:reset`  → wipe + reseed dev.db against this schema.
+//   `npm run db:local:gen`    → regenerate Prisma client against this schema.
+//   `npm run dev:local`       → regenerate client and start `next dev`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// Tenancy & Users
+// ============================================================================
+
+model Organization {
+  id              String   @id @default(cuid())
+  name            String
+  slug            String   @unique
+  logoUrl         String?
+  baseCurrency    String   @default("USD")
+  locale          String   @default("en")
+  invoiceTemplate String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  branches               Branch[]
+  users                  User[]
+  customers              Customer[]
+  vehicles               Vehicle[]
+  trailers               Trailer[]
+  drivers                Driver[]
+  orders                 Order[]
+  shipments              Shipment[]
+  trips                  Trip[]
+  invoices               Invoice[]
+  expenses               Expense[]
+  warehouses             Warehouse[]
+  items                  StockItem[]
+  documents              Document[]
+  auditLogs              AuditLog[]
+  leads                  Lead[]
+  contacts               Contact[]
+  payments               Payment[]
+  settlements            Settlement[]
+  quotations             Quotation[]
+  suppliers              Supplier[]
+  customFieldDefinitions CustomFieldDefinition[]
+  customFieldValues      CustomFieldValue[]
+  customFieldGroups      CustomFieldGroup[]
+  importFieldConfigs     ImportFieldConfig[]
+  contactLookupValues    ContactLookupValue[]
+}
+
+model CustomFieldDefinition {
+  id             String   @id @default(cuid())
+  orgId          String
+  entityType     String
+  key            String
+  label          String
+  type           String
+  required       Boolean  @default(false)
+  defaultValue   String?
+  helpText       String?
+  placeholder    String?
+  optionsJson    String?
+  validationJson String?
+  sortOrder      Int      @default(0)
+  isActive       Boolean  @default(true)
+  /// Free-form group bucket key. Pairs with `CustomFieldGroup` for label/order.
+  /// Null falls into the implicit "Other" group at render time.
+  groupKey       String?
+  /// Width in 12-column responsive grid (1..12). 12 = full row.
+  width          Int      @default(12)
+  /// Default suggestion for the entity-list column picker.
+  showInList     Boolean  @default(false)
+  /// Render TEXT as a Textarea instead of a single-line Input.
+  multiline      Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  values       CustomFieldValue[]
+
+  @@unique([orgId, entityType, key])
+  @@index([orgId, entityType, isActive])
+}
+
+/// User-defined grouping bucket for custom fields. Used by the builder to
+/// label and order the collapsible cards rendered by `CustomFieldsForm` and
+/// `CustomFieldsDisplay`. Definitions reference a group by its `key`.
+model CustomFieldGroup {
+  id         String   @id @default(cuid())
+  orgId      String
+  entityType String
+  key        String
+  label      String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, entityType, key])
+  @@index([orgId, entityType])
+}
+
+model CustomFieldValue {
+  id           String   @id @default(cuid())
+  orgId        String
+  definitionId String
+  entityType   String
+  recordId     String
+  valueJson    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  organization Organization          @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  definition   CustomFieldDefinition @relation(fields: [definitionId], references: [id], onDelete: Cascade)
+
+  @@unique([definitionId, recordId])
+  @@index([orgId, entityType, recordId])
+}
+
+/// Per-org override of which fields are required when importing from
+/// .xlsx/.csv. `fieldKey` matches a built-in registry key (e.g. "name") or
+/// a custom field definition key prefixed with "cf_". When no row exists for
+/// a given (entityType, fieldKey), the importer falls back to the field's
+/// default required state.
+model ImportFieldConfig {
+  id         String   @id @default(cuid())
+  orgId      String
+  entityType String
+  fieldKey   String
+  required   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, entityType, fieldKey])
+  @@index([orgId, entityType])
+}
+
+model Branch {
+  id        String   @id @default(cuid())
+  orgId     String
+  name      String
+  address   String?
+  city      String?
+  country   String?
+  phone     String?
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  users        User[]
+  vehicles     Vehicle[]
+
+  @@index([orgId])
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  passwordHash  String?
+  image         String?
+  role          String    @default("DISPATCHER")
+  locale        String    @default("en")
+  phone         String?
+  emailVerified DateTime?
+  lastLoginAt   DateTime?
+  isActive      Boolean   @default(true)
+  orgId         String?
+  branchId      String?
+  customerId    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  organization               Organization?       @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  branch                     Branch?             @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  customer                   Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  driver                     Driver?
+  sessions                   Session[]
+  accounts                   Account[]
+  invitations                Invitation[]        @relation("InvitedBy")
+  auditLogs                  AuditLog[]
+  assignedLeads              Lead[]              @relation("AssignedLeads")
+  assignedLeadTasks          LeadTask[]          @relation("AssignedLeadTasks")
+  createdPayments            Payment[]           @relation("CreatedPayments")
+  ownedQuotations            Quotation[]         @relation("OwnedQuotations")
+  salesManagedQuotations     Quotation[]         @relation("SalesManagedQuotations")
+  authoredQuotationRevisions QuotationRevision[] @relation("AuthoredQuotationRevisions")
+  authoredQuotationMessages  QuotationMessage[]  @relation("AuthoredQuotationMessages")
+  ownedSuppliers             Supplier[]          @relation("OwnedSuppliers")
+  managedSupplierOffers      SupplierOffer[]     @relation("ManagedSupplierOffers")
+
+  @@index([orgId])
+  @@index([role])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Invitation {
+  id          String    @id @default(cuid())
+  email       String
+  role        String    @default("DISPATCHER")
+  orgId       String
+  invitedById String
+  token       String    @unique
+  acceptedAt  DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime  @default(now())
+
+  invitedBy User @relation("InvitedBy", fields: [invitedById], references: [id])
+
+  @@index([orgId])
+}
+
+// ============================================================================
+// Customers (CRM)
+// ============================================================================
+
+model Customer {
+  id               String    @id @default(cuid())
+  orgId            String
+  name             String
+  code             String?
+  status           String    @default("PROSPECT") // PROSPECT | ACTIVE | INACTIVE
+  email            String?
+  phone            String?
+  taxId            String?
+  address          String?
+  city             String?
+  country          String?
+  creditLimit      Decimal   @default(0)
+  balance          Decimal   @default(0)
+  notes            String?
+  firstActivatedAt DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  contacts     Contact[]
+  orders       Order[]
+  invoices     Invoice[]
+  users        User[]
+  leads        Lead[]
+  payments     Payment[]
+  quotations   Quotation[]
+
+  @@unique([orgId, code])
+  @@index([orgId])
+  @@index([status])
+}
+
+model Contact {
+  id               String   @id @default(cuid())
+  orgId            String
+  code             String   @default("")
+  customerId       String?
+  name             String
+  jobTitle         String?
+  email            String?
+  phone            String?
+  company          String?
+  taxId            String?
+  industry         String?
+  status           String   @default("ACTIVE")
+  relationshipType String   @default("OTHER")
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  leads        Lead[]
+  quotations   Quotation[]
+
+  @@unique([orgId, code])
+  @@index([orgId])
+  @@index([customerId])
+}
+
+model ContactLookupValue {
+  id        String   @id @default(cuid())
+  orgId     String
+  kind      String
+  value     String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, kind, value])
+  @@index([orgId, kind])
+}
+
+// ============================================================================
+// Fleet
+// ============================================================================
+
+model Vehicle {
+  id         String   @id @default(cuid())
+  orgId      String
+  branchId   String?
+  plate      String
+  vin        String?
+  type       String   @default("TRUCK")
+  status     String   @default("ACTIVE")
+  make       String?
+  model      String?
+  year       Int?
+  capacityKg Int?
+  capacityM3 Float?
+  odometerKm Int      @default(0)
+  fuelType   String?
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  branch       Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  maintenance  Maintenance[]
+  fuelRecords  FuelRecord[]
+  shipments    Shipment[]
+  trips        Trip[]
+  expenses     Expense[]
+
+  @@unique([orgId, plate])
+  @@index([orgId])
+}
+
+model Trailer {
+  id         String   @id @default(cuid())
+  orgId      String
+  plate      String
+  type       String?
+  capacityKg Int?
+  createdAt  DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, plate])
+}
+
+model Maintenance {
+  id          String    @id @default(cuid())
+  vehicleId   String
+  kind        String    @default("SCHEDULED")
+  description String
+  cost        Decimal   @default(0)
+  odometerKm  Int?
+  dueDate     DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId])
+}
+
+model FuelRecord {
+  id         String   @id @default(cuid())
+  vehicleId  String
+  driverId   String?
+  liters     Float
+  cost       Decimal
+  odometerKm Int?
+  station    String?
+  fueledAt   DateTime @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  driver  Driver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
+
+  @@index([vehicleId])
+}
+
+// ============================================================================
+// Drivers
+// ============================================================================
+
+model Driver {
+  id            String    @id @default(cuid())
+  orgId         String
+  userId        String?   @unique
+  firstName     String
+  lastName      String
+  email         String?
+  phone         String?
+  licenseNo     String
+  licenseExpiry DateTime?
+  dateOfBirth   DateTime?
+  address       String?
+  status        String    @default("AVAILABLE")
+  payRatePerKm  Decimal   @default(0)
+  payRateFlat   Decimal   @default(0)
+  hireDate      DateTime?
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+  shipments    Shipment[]
+  trips        Trip[]
+  fuelRecords  FuelRecord[]
+  settlements  Settlement[]
+  expenses     Expense[]
+  payments     Payment[]
+
+  @@index([orgId])
+}
+
+// ============================================================================
+// Orders & Shipments
+// ============================================================================
+
+model Order {
+  id                String    @id @default(cuid())
+  orgId             String
+  number            String
+  status            String    @default("QUOTE")
+  customerId        String
+  leadId            String?
+  sourceQuotationId String?
+  reference         String?
+  price             Decimal   @default(0)
+  currency          String    @default("USD")
+  notes             String?
+  requestedAt       DateTime?
+  confirmedAt       DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization       Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer           Customer            @relation(fields: [customerId], references: [id])
+  lead               Lead?               @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  sourceQuotation    Quotation?          @relation("QuotationConvertedOrders", fields: [sourceQuotationId], references: [id], onDelete: SetNull)
+  shipmentLinks      ShipmentOrder[]
+  invoices           Invoice[]
+  invoiceLines       InvoiceLine[]
+  expenses           Expense[]
+  expenseAllocations ExpenseAllocation[]
+  lines              OrderLine[]
+
+  @@unique([orgId, number])
+  @@index([status])
+  @@index([leadId])
+  @@index([sourceQuotationId])
+}
+
+model OrderLine {
+  id          String  @id @default(cuid())
+  orderId     String
+  description String
+  quantity    Decimal @default(1)
+  unitPrice   Decimal @default(0)
+  total       Decimal @default(0)
+  sortOrder   Int     @default(0)
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+}
+
+model Shipment {
+  id                String    @id @default(cuid())
+  orgId             String
+  tripId            String?
+  number            String
+  trackingCode      String    @unique
+  status            String    @default("PLANNED")
+  driverId          String?
+  vehicleId         String?
+  cargoType         String?
+  cargoWeightKg     Float?
+  cargoVolumeM3     Float?
+  temperature       String?
+  plannedDistanceKm Float?
+  actualDistanceKm  Float?
+  plannedStart      DateTime?
+  plannedEnd        DateTime?
+  startedAt         DateTime?
+  completedAt       DateTime?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  trip         Trip?           @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  driver       Driver?         @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  vehicle      Vehicle?        @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  stops        Stop[]
+  events       ShipmentEvent[]
+  pods         POD[]
+  expenses     Expense[]
+  orderLinks   ShipmentOrder[]
+
+  @@unique([orgId, number])
+  @@index([status])
+  @@index([driverId])
+  @@index([tripId])
+}
+
+model ShipmentOrder {
+  id         String   @id @default(cuid())
+  shipmentId String
+  orderId    String
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([shipmentId, orderId])
+  @@index([orderId])
+  @@index([shipmentId])
+}
+
+// ============================================================================
+// Trips — a truck run that can carry multiple shipments (orders)
+// ============================================================================
+
+model Trip {
+  id              String    @id @default(cuid())
+  orgId           String
+  number          String
+  status          String    @default("PLANNED")
+  driverId        String?
+  vehicleId       String?
+  plannedStart    DateTime?
+  plannedEnd      DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  totalDistanceKm Float?
+  notes           String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  driver       Driver?       @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  vehicle      Vehicle?      @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  shipments    Shipment[]
+  expenses     Expense[]
+  invoiceLines InvoiceLine[]
+
+  @@unique([orgId, number])
+  @@index([orgId])
+  @@index([status])
+  @@index([driverId])
+  @@index([vehicleId])
+}
+
+model Stop {
+  id          String    @id @default(cuid())
+  shipmentId  String
+  sequence    Int
+  kind        String
+  name        String?
+  address     String
+  city        String?
+  country     String?
+  lat         Float?
+  lng         Float?
+  windowStart DateTime?
+  windowEnd   DateTime?
+  arrivedAt   DateTime?
+  departedAt  DateTime?
+  contact     String?
+  phone       String?
+  notes       String?
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+}
+
+model ShipmentEvent {
+  id         String   @id @default(cuid())
+  shipmentId String
+  type       String
+  at         DateTime @default(now())
+  lat        Float?
+  lng        Float?
+  note       String?
+  meta       String?
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+}
+
+model POD {
+  id           String   @id @default(cuid())
+  shipmentId   String
+  stopId       String?
+  fileKey      String
+  fileUrl      String?
+  capturedAt   DateTime @default(now())
+  signedBy     String?
+  signatureKey String?
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId])
+}
+
+// ============================================================================
+// Warehouse / Inventory
+// ============================================================================
+
+model Warehouse {
+  id        String   @id @default(cuid())
+  orgId     String
+  name      String
+  address   String?
+  city      String?
+  country   String?
+  createdAt DateTime @default(now())
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  bins         Bin[]
+  movements    StockMovement[]
+
+  @@index([orgId])
+}
+
+model Bin {
+  id          String  @id @default(cuid())
+  warehouseId String
+  code        String
+  description String?
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+
+  @@unique([warehouseId, code])
+}
+
+model StockItem {
+  id          String   @id @default(cuid())
+  orgId       String
+  sku         String
+  name        String
+  description String?
+  unit        String   @default("pcs")
+  unitPrice   Decimal  @default(0)
+  currency    String   @default("USD")
+  taxRate     Decimal  @default(0)
+  weightKg    Float?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+
+  organization   Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  movements      StockMovement[]
+  quotationLines QuotationLine[]
+
+  @@unique([orgId, sku])
+  @@index([orgId])
+}
+
+model StockMovement {
+  id          String   @id @default(cuid())
+  warehouseId String
+  itemId      String
+  kind        String
+  quantity    Float
+  reference   String?
+  at          DateTime @default(now())
+  notes       String?
+
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Cascade)
+  item      StockItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([warehouseId])
+  @@index([itemId])
+}
+
+// ============================================================================
+// Accounting
+// ============================================================================
+
+model Invoice {
+  id         String   @id @default(cuid())
+  orgId      String
+  number     String
+  orderId    String?
+  customerId String
+  status     String   @default("DRAFT")
+  issueDate  DateTime @default(now())
+  dueDate    DateTime
+  subtotal   Decimal  @default(0)
+  taxRate    Decimal  @default(0)
+  taxAmount  Decimal  @default(0)
+  total      Decimal  @default(0)
+  paid       Decimal  @default(0)
+  currency   String   @default("USD")
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  order        Order?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  customer     Customer      @relation(fields: [customerId], references: [id])
+  lines        InvoiceLine[]
+  payments     Payment[]
+
+  @@unique([orgId, number])
+  @@index([status])
+}
+
+model InvoiceLine {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  kind        String  @default("MANUAL") // ORDER | EXPENSE | TRIP | MANUAL
+  description String
+  quantity    Decimal @default(1)
+  unitPrice   Decimal
+  total       Decimal
+
+  // Source references (optional, depending on kind)
+  orderId String?
+  tripId  String?
+
+  invoice  Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  order    Order?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  trip     Trip?     @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  expenses Expense[]
+
+  @@index([invoiceId])
+  @@index([orderId])
+  @@index([tripId])
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  orgId     String
+  kind      String   @default("RECEIVABLE") // RECEIVABLE | SETTLEMENT_PAYOUT
+  amount    Decimal
+  currency  String   @default("USD")
+  method    String   @default("BANK")
+  reference String?
+  note      String?
+  paidAt    DateTime @default(now())
+
+  invoiceId    String?
+  customerId   String?
+  settlementId String?
+  driverId     String?
+  createdById  String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invoice      Invoice?     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  settlement   Settlement?  @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  driver       Driver?      @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  createdBy    User?        @relation("CreatedPayments", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, paidAt])
+  @@index([orgId, kind])
+  @@index([invoiceId])
+  @@index([settlementId])
+  @@index([customerId])
+  @@index([driverId])
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  orgId       String
+  category    String
+  description String
+  amount      Decimal
+  currency    String   @default("USD")
+  vendor      String?
+  incurredAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  // Scope (one-of, optional). When tripId is set and orderId is null,
+  // the expense is trip-level and can be allocated to orders via ExpenseAllocation.
+  orderId    String?
+  tripId     String?
+  shipmentId String?
+  driverId   String?
+  vehicleId  String?
+
+  // Billing flow
+  billable      Boolean @default(false)
+  invoiceLineId String?
+
+  organization Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  order        Order?              @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  trip         Trip?               @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  shipment     Shipment?           @relation(fields: [shipmentId], references: [id], onDelete: SetNull)
+  driver       Driver?             @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  vehicle      Vehicle?            @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  invoiceLine  InvoiceLine?        @relation(fields: [invoiceLineId], references: [id], onDelete: SetNull)
+  allocations  ExpenseAllocation[]
+
+  @@index([orgId])
+  @@index([orderId])
+  @@index([tripId])
+  @@index([shipmentId])
+  @@index([driverId])
+  @@index([vehicleId])
+}
+
+model ExpenseAllocation {
+  id        String   @id @default(cuid())
+  expenseId String
+  orderId   String
+  amount    Decimal
+  method    String // MANUAL | WEIGHT | VOLUME | DISTANCE | REVENUE | EQUAL
+  createdAt DateTime @default(now())
+
+  expense Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([expenseId, orderId])
+  @@index([orderId])
+}
+
+model Settlement {
+  id         String    @id @default(cuid())
+  orgId      String
+  driverId   String
+  periodFrom DateTime
+  periodTo   DateTime
+  totalKm    Float     @default(0)
+  gross      Decimal   @default(0)
+  deductions Decimal   @default(0)
+  net        Decimal   @default(0)
+  currency   String    @default("USD")
+  notes      String?
+  paidAt     DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  driver       Driver       @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  payments     Payment[]
+
+  @@index([orgId])
+  @@index([driverId])
+  @@index([paidAt])
+}
+
+// ============================================================================
+// Documents & Audit
+// ============================================================================
+
+model Document {
+  id        String   @id @default(cuid())
+  orgId     String
+  ownerType String
+  ownerId   String
+  kind      String   @default("OTHER")
+  name      String
+  fileKey   String
+  fileUrl   String?
+  mimeType  String?
+  sizeBytes Int?
+  createdAt DateTime @default(now())
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, ownerType, ownerId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  orgId     String?
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  meta      String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  organization Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([orgId])
+  @@index([entity, entityId])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String?
+  email     String?
+  phone     String?
+  channel   String
+  subject   String?
+  body      String
+  status    String    @default("queued")
+  sentAt    DateTime?
+  meta      String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([status])
+}
+
+// ============================================================================
+// Sales — Quotations
+// ============================================================================
+
+model Quotation {
+  id           String    @id @default(cuid())
+  orgId        String
+  number       String
+  status       String    @default("PRICING") // PRICING | DRAFT | SENT | COUNTERED | ACCEPTED | REJECTED | EXPIRED | CONVERTED | CANCELLED | WON | LOST
+  customerId   String
+  contactId    String?
+  leadId       String?
+  ownerId      String?
+  salesManagerId String?
+  currency     String    @default("USD")
+  subtotal     Decimal   @default(0)
+  taxRate      Decimal   @default(0)
+  taxAmount    Decimal   @default(0)
+  discount     Decimal   @default(0)
+  total        Decimal   @default(0)
+  validUntil   DateTime?
+  notes        String?
+  rejectReason String?
+  sentAt       DateTime?
+  acceptedAt   DateTime?
+  rejectedAt   DateTime?
+  convertedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // RFQ / Inquiry fields
+  /// Comma-separated team codes (e.g. "SEA,LAND,CUSTOMS"). Mirrors `QuotationTeam` enum literals.
+  requestedTeams      String?
+  priority            String   @default("MEDIUM") // LOW | MEDIUM | HIGH | URGENT (mirrors LeadPriority)
+  mode                String?
+  incoterms           String?
+  originPort          String?
+  originAddress       String?
+  destinationPort     String?
+  destinationAddress  String?
+  cargoDescription    String?
+  shipmentDetails     String?
+  cargoValue          Decimal?
+  cargoValueCurrency  String?
+  cargoReadyDate      DateTime?
+  specialRequirements String?
+  wonAt               DateTime?
+  lostAt              DateTime?
+  lostReason          String?
+
+  organization    Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  customer        Customer            @relation(fields: [customerId], references: [id])
+  contact         Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  lead            Lead?               @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  owner           User?               @relation("OwnedQuotations", fields: [ownerId], references: [id], onDelete: SetNull)
+  salesManager    User?               @relation("SalesManagedQuotations", fields: [salesManagerId], references: [id], onDelete: SetNull)
+  lines           QuotationLine[]
+  revisions       QuotationRevision[]
+  messages        QuotationMessage[]
+  supplierOffers  SupplierOffer[]
+  activities      QuotationActivity[]
+  convertedOrders Order[]             @relation("QuotationConvertedOrders")
+
+  @@unique([orgId, number])
+  @@index([orgId, status])
+  @@index([customerId])
+  @@index([leadId])
+  @@index([ownerId])
+  @@index([salesManagerId])
+}
+
+// ============================================================================
+// Suppliers (carriers, brokers, 3PLs)
+// ============================================================================
+
+model Supplier {
+  id                     String   @id @default(cuid())
+  orgId                  String
+  code                   String?
+  name                   String
+  /// SHIPPING_LINE | AIRLINE | CUSTOMS_BROKER | WAREHOUSE_3PL | COURIER_EXPRESS | ROAD_CARRIER | RAIL_CARRIER | OTHER
+  type                   String   @default("OTHER")
+  status                 String   @default("ACTIVE") // ACTIVE | INACTIVE | SUSPENDED
+  email                  String?
+  phone                  String?
+  website                String?
+  taxId                  String?
+  address                String?
+  city                   String?
+  country                String?
+  currency               String   @default("USD")
+  paymentTerms           String?
+  defaultTransitTimeDays Int?
+  notes                  String?
+  ownerId                String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  owner        User?           @relation("OwnedSuppliers", fields: [ownerId], references: [id], onDelete: SetNull)
+  offers       SupplierOffer[]
+
+  @@unique([orgId, code])
+  @@index([orgId, status])
+  @@index([orgId, type])
+}
+
+model SupplierOffer {
+  id              String    @id @default(cuid())
+  quotationId     String
+  supplierId      String
+  /// SEA | LAND | AIR | CUSTOMS | WAREHOUSE | OTHER
+  team            String
+  managerUserId   String?
+  /// DRAFT | REQUESTED | RECEIVED | SELECTED | REJECTED
+  status          String    @default("DRAFT")
+  totalCost       Decimal   @default(0)
+  currency        String    @default("USD")
+  transitTimeDays Int?
+  incoterms       String?
+  validUntil      DateTime?
+  terms           String?
+  notes           String?
+  isSelected      Boolean   @default(false)
+  requestedAt     DateTime?
+  receivedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  supplier  Supplier  @relation(fields: [supplierId], references: [id], onDelete: NoAction)
+  manager   User?     @relation("ManagedSupplierOffers", fields: [managerUserId], references: [id], onDelete: SetNull)
+
+  @@index([quotationId])
+  @@index([supplierId])
+  @@index([quotationId, team, isSelected])
+}
+
+/// Free-form activity feed scoped to a Quotation. Mirrors `LeadActivity` so
+/// the inquiry tab can show notes, supplier-offer events, status changes,
+/// and outbound emails in a unified timeline.
+model QuotationActivity {
+  id          String   @id @default(cuid())
+  quotationId String
+  userId      String?
+  /// NOTE | EMAIL | CALL | MEETING | STATUS_CHANGE | SUPPLIER_OFFER | RFQ_SENT
+  kind        String
+  note        String?
+  /// JSON-serialised payload for structured events (e.g. supplier offer id).
+  meta        String?
+  at          DateTime @default(now())
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId, at])
+}
+
+model QuotationLine {
+  id          String  @id @default(cuid())
+  quotationId String
+  itemId      String?
+  description String
+  quantity    Decimal @default(1)
+  unitPrice   Decimal @default(0)
+  total       Decimal @default(0)
+  sortOrder   Int     @default(0)
+
+  /// Customer's most-recent response on this line, if any.
+  /// `ACCEPTED` = customer kept admin's values as-is.
+  /// `MODIFIED` = customer counter-proposed (see proposed* fields).
+  customerStatus      String?
+  customerNote        String?
+  proposedQuantity    Decimal?
+  proposedUnitPrice   Decimal?
+  proposedDescription String?
+
+  quotation Quotation          @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  item      StockItem?         @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  messages  QuotationMessage[]
+
+  @@index([quotationId])
+  @@index([itemId])
+}
+
+/// Immutable per-round snapshot of a quotation. Captures both the admin's
+/// outgoing offers and the customer's incoming responses so the negotiation
+/// history is fully reconstructable.
+model QuotationRevision {
+  id           String   @id @default(cuid())
+  quotationId  String
+  version      Int
+  source       String // ADMIN | CUSTOMER
+  authorUserId String?
+  message      String?
+  currency     String
+  subtotal     Decimal
+  taxRate      Decimal
+  taxAmount    Decimal
+  discount     Decimal
+  total        Decimal
+  /// JSON snapshot of all lines at this revision. Each entry contains:
+  /// { description, quantity, unitPrice, total, sortOrder, itemId, customerStatus,
+  ///   customerNote, proposedQuantity, proposedUnitPrice, proposedDescription }
+  linesJson    String
+  createdAt    DateTime @default(now())
+
+  quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  author    User?     @relation("AuthoredQuotationRevisions", fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@unique([quotationId, version])
+  @@index([quotationId])
+}
+
+/// Free-form chat between the customer (CUSTOMER role) and admin staff on
+/// a quotation. When `lineId` is set, the message is scoped to that
+/// `QuotationLine` (per-line comment thread). When `lineId` is null, it's a
+/// whole-quote conversation. Persists across negotiation rounds.
+model QuotationMessage {
+  id             String   @id @default(cuid())
+  quotationId    String
+  lineId         String?
+  authorUserId   String?
+  authorRole     String // ADMIN | CUSTOMER | SYSTEM
+  body           String
+  createdAt      DateTime @default(now())
+  readByCustomer Boolean  @default(false)
+  readByAdmin    Boolean  @default(false)
+
+  quotation Quotation      @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  line      QuotationLine? @relation(fields: [lineId], references: [id], onDelete: SetNull)
+  author    User?          @relation("AuthoredQuotationMessages", fields: [authorUserId], references: [id], onDelete: SetNull)
+
+  @@index([quotationId, createdAt])
+  @@index([lineId])
+}
+
+// ============================================================================
+// CRM — Leads
+// ============================================================================
+
+model Lead {
+  id             String    @id @default(cuid())
+  orgId          String
+  name           String
+  email          String?
+  phone          String?
+  company        String?
+  status         String    @default("NEW")
+  source         String?
+  assignedToId   String?
+  contactId      String?
+  estimatedValue Decimal   @default(0)
+  currency       String    @default("USD")
+  score          Int       @default(0)
+  priority       String    @default("MEDIUM")
+  nextFollowUp   DateTime?
+  notes          String?
+  lostReason     String?
+  convertedAt    DateTime?
+  wonAt          DateTime?
+  customerId     String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  assignedTo   User?          @relation("AssignedLeads", fields: [assignedToId], references: [id], onDelete: SetNull)
+  customer     Customer?      @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  contact      Contact?       @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  activities   LeadActivity[]
+  tasks        LeadTask[]
+  orders       Order[]
+  quotations   Quotation[]
+
+  @@index([orgId])
+  @@index([status])
+  @@index([assignedToId])
+  @@index([contactId])
+  @@index([priority])
+  @@index([wonAt])
+}
+
+model LeadActivity {
+  id     String   @id @default(cuid())
+  leadId String
+  userId String?
+  kind   String
+  note   String?
+  at     DateTime @default(now())
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+}
+
+model LeadTask {
+  id           String    @id @default(cuid())
+  leadId       String
+  title        String
+  dueAt        DateTime?
+  completedAt  DateTime?
+  assignedToId String?
+  priority     String    @default("MEDIUM")
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  lead       Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  assignedTo User? @relation("AssignedLeadTasks", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([dueAt])
+  @@index([assignedToId])
+}
