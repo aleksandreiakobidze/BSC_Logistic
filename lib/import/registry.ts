@@ -118,14 +118,6 @@ const ORDER_FIELDS: BuiltinField[] = [
   { key: "price", label: "Price", type: "number", defaultRequired: false, example: 0 },
   { key: "currency", label: "Currency", type: "string", defaultRequired: false, example: "USD" },
   { key: "notes", label: "Notes", type: "string", defaultRequired: false, example: "" },
-  { key: "cargoType", label: "Cargo Type", type: "string", defaultRequired: false, example: "Pallets" },
-  { key: "cargoWeightKg", label: "Cargo Weight (kg)", type: "number", defaultRequired: false, example: 0 },
-  { key: "pickupAddress", label: "Pickup Address", type: "string", defaultRequired: true, example: "Warehouse 1" },
-  { key: "pickupCity", label: "Pickup City", type: "string", defaultRequired: false, example: "Tbilisi" },
-  { key: "pickupCountry", label: "Pickup Country", type: "string", defaultRequired: false, example: "GE" },
-  { key: "dropoffAddress", label: "Dropoff Address", type: "string", defaultRequired: true, example: "Customer DC" },
-  { key: "dropoffCity", label: "Dropoff City", type: "string", defaultRequired: false, example: "Batumi" },
-  { key: "dropoffCountry", label: "Dropoff Country", type: "string", defaultRequired: false, example: "GE" },
 ];
 
 export const BUILTIN_FIELDS: Record<ImportEntitySlug, BuiltinField[]> = {

@@ -13,6 +13,7 @@ import { StatusBadge } from "@/components/app/status-badge";
 import { Button } from "@/components/ui/button";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { getOrderProfitability } from "@/lib/profitability";
+import { OrderActionsBar } from "./order-actions-bar";
 
 export default async function OrderDetailPage({
   params,
@@ -77,6 +78,17 @@ export default async function OrderDetailPage({
                 </>
               )}
             </div>
+          }
+          actions={
+            <OrderActionsBar
+              orderId={order.id}
+              orderNumber={order.number}
+              status={order.status}
+              shipmentCount={order.shipments.length}
+              invoiceCount={order.invoices.length}
+              expenseCount={order.expenses.length + order.expenseAllocations.length}
+              hasSourceQuotation={Boolean(order.sourceQuotation)}
+            />
           }
         />
       </div>

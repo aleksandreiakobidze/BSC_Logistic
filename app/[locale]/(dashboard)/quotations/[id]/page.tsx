@@ -278,9 +278,17 @@ export default async function QuotationDetailPage({
     mode: q.mode,
     incoterms: q.incoterms,
     originPort: q.originPort,
+    originPortLat: q.originPortLat,
+    originPortLng: q.originPortLng,
     originAddress: q.originAddress,
+    originAddressLat: q.originAddressLat,
+    originAddressLng: q.originAddressLng,
     destinationPort: q.destinationPort,
+    destinationPortLat: q.destinationPortLat,
+    destinationPortLng: q.destinationPortLng,
     destinationAddress: q.destinationAddress,
+    destinationAddressLat: q.destinationAddressLat,
+    destinationAddressLng: q.destinationAddressLng,
     cargoDescription: q.cargoDescription,
     shipmentDetails: q.shipmentDetails,
     cargoValue: q.cargoValue == null ? null : Number(q.cargoValue),
@@ -334,85 +342,87 @@ export default async function QuotationDetailPage({
           hasPortalUser={hasPortalUser}
         />
 
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="min-w-0">
-            <QuotationTabs
-              initialTab={initialTab}
-              inquirySlot={
-                <InquiryTab
+        <QuotationTabs
+          initialTab={initialTab}
+          inquirySlot={
+            <InquiryTab
+              quotationId={q.id}
+              status={q.status}
+              number={q.number}
+              customerName={q.customer.name}
+              contactName={q.contact?.name ?? null}
+              ownerName={q.salesManager?.name ?? q.owner?.name ?? null}
+              createdAt={q.createdAt.toISOString()}
+              currency={q.currency}
+              total={liveTotal}
+              header={rfqHeader}
+              offers={offerRows}
+              lines={clientLines}
+              documents={documentsOut}
+              activities={activitiesOut}
+              users={users}
+              locale={locale}
+              canEditHeader={headerEditable}
+            />
+          }
+          offerSlot={
+            <OfferTab
+              quotationId={q.id}
+              status={q.status}
+              currency={q.currency}
+              locale={locale}
+              editable={editable}
+              showNegotiation={q.status === QuotationStatus.COUNTERED}
+              diff={diff}
+              liveTotal={liveTotal}
+              customerTotal={customerTotal}
+              lines={lines}
+              lineMessages={Object.fromEntries(messagesByLine)}
+              totals={{
+                subtotal: Number(q.subtotal),
+                discount: Number(q.discount),
+                taxAmount: Number(q.taxAmount),
+                taxRate: Number(q.taxRate),
+                total: Number(q.total),
+              }}
+              actionsSlot={
+                <QuotationActionPanel
                   quotationId={q.id}
                   status={q.status}
-                  number={q.number}
-                  customerName={q.customer.name}
-                  contactName={q.contact?.name ?? null}
-                  ownerName={q.salesManager?.name ?? q.owner?.name ?? null}
-                  createdAt={q.createdAt.toISOString()}
-                  currency={q.currency}
-                  total={liveTotal}
-                  header={rfqHeader}
-                  offers={offerRows}
-                  lines={clientLines}
-                  documents={documentsOut}
-                  activities={activitiesOut}
-                  users={users}
-                  locale={locale}
-                  canEditHeader={headerEditable}
-                />
-              }
-              offerSlot={
-                <OfferTab
-                  quotationId={q.id}
-                  status={q.status}
-                  currency={q.currency}
-                  locale={locale}
-                  editable={editable}
-                  showNegotiation={q.status === QuotationStatus.COUNTERED}
-                  diff={diff}
-                  liveTotal={liveTotal}
-                  customerTotal={customerTotal}
-                  lines={lines}
-                  lineMessages={Object.fromEntries(messagesByLine)}
-                  totals={{
-                    subtotal: Number(q.subtotal),
-                    discount: Number(q.discount),
-                    taxAmount: Number(q.taxAmount),
-                    taxRate: Number(q.taxRate),
-                    total: Number(q.total),
+                  convertedOrderId={q.convertedOrders[0]?.id}
+                  meta={{
+                    customer: { id: q.customer.id, name: q.customer.name },
+                    contact: q.contact
+                      ? { id: q.contact.id, name: q.contact.name }
+                      : null,
+                    lead: q.lead ? { id: q.lead.id, name: q.lead.name } : null,
+                    owner: q.owner ? { name: q.owner.name } : null,
+                    validUntil: q.validUntil
+                      ? q.validUntil.toISOString()
+                      : null,
+                    createdAt: q.createdAt.toISOString(),
+                    sentAt: q.sentAt ? q.sentAt.toISOString() : null,
+                    acceptedAt: q.acceptedAt
+                      ? q.acceptedAt.toISOString()
+                      : null,
+                    convertedAt: q.convertedAt
+                      ? q.convertedAt.toISOString()
+                      : null,
+                    convertedOrders: q.convertedOrders,
                   }}
                 />
               }
+              conversationSlot={
+                <QuotationChatPanel
+                  quotationId={q.id}
+                  messages={chatMessages}
+                  viewerRole="ADMIN"
+                  locale={locale}
+                />
+              }
             />
-          </div>
-
-          <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pr-1">
-            <QuotationActionPanel
-              quotationId={q.id}
-              status={q.status}
-              convertedOrderId={q.convertedOrders[0]?.id}
-              meta={{
-                customer: { id: q.customer.id, name: q.customer.name },
-                contact: q.contact
-                  ? { id: q.contact.id, name: q.contact.name }
-                  : null,
-                lead: q.lead ? { id: q.lead.id, name: q.lead.name } : null,
-                owner: q.owner ? { name: q.owner.name } : null,
-                validUntil: q.validUntil ? q.validUntil.toISOString() : null,
-                createdAt: q.createdAt.toISOString(),
-                sentAt: q.sentAt ? q.sentAt.toISOString() : null,
-                acceptedAt: q.acceptedAt ? q.acceptedAt.toISOString() : null,
-                convertedAt: q.convertedAt ? q.convertedAt.toISOString() : null,
-                convertedOrders: q.convertedOrders,
-              }}
-            />
-
-            <QuotationChatPanel
-              quotationId={q.id}
-              messages={chatMessages}
-              viewerRole="ADMIN"
-              locale={locale}
-            />
-          </aside>
-        </div>
+          }
+        />
       </div>
     </QuotationRealtimeProvider>
   );

@@ -34,7 +34,14 @@ export type TransitionError =
   | { code: "NO_SELECTED_OFFER" }
   | { code: "NO_LINES" }
   | { code: "NO_PORTAL_USER" }
-  | { code: "NOT_ACCEPTED" };
+  | { code: "NOT_ACCEPTED" }
+  | { code: "REQUIRES_REASON"; reason: TransitionReason };
+
+export type TransitionReason = "orderReverted";
+
+export interface TransitionContext {
+  reason?: TransitionReason;
+}
 
 const TERMINAL_STATUSES = new Set<QuotationStatusValue>([
   QuotationStatus.WON,
@@ -76,7 +83,7 @@ const ALLOWED: Record<QuotationStatusValue, TransitionTarget[]> = {
     QuotationStatus.CANCELLED,
   ],
   [QuotationStatus.REJECTED]: [QuotationStatus.LOST],
-  [QuotationStatus.CONVERTED]: [QuotationStatus.WON],
+  [QuotationStatus.CONVERTED]: [QuotationStatus.WON, QuotationStatus.DRAFT],
   [QuotationStatus.EXPIRED]: [],
   [QuotationStatus.CANCELLED]: [],
   [QuotationStatus.WON]: [],
@@ -109,6 +116,7 @@ export function getAllowedTransitions(
 export function checkQuotationTransition(
   q: QuotationForCheck,
   next: TransitionTarget,
+  context: TransitionContext = {},
 ): { ok: true } | { ok: false; error: TransitionError } {
   const allowed = ALLOWED[q.status];
   if (allowed.length === 0) {
@@ -125,6 +133,20 @@ export function checkQuotationTransition(
     if (q.selectedOffersCount < 1) {
       return { ok: false, error: { code: "NO_SELECTED_OFFER" } };
     }
+  }
+
+  // CONVERTED -> DRAFT is only valid through the explicit revert-from-order
+  // flow. UI-driven status changes must not silently demote a converted
+  // quotation back to draft.
+  if (
+    q.status === QuotationStatus.CONVERTED &&
+    next === QuotationStatus.DRAFT &&
+    context.reason !== "orderReverted"
+  ) {
+    return {
+      ok: false,
+      error: { code: "REQUIRES_REASON", reason: "orderReverted" },
+    };
   }
 
   if (

@@ -34,10 +34,38 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import {
+  LocationAutocomplete,
+  type LocationValue,
+} from "@/components/app/location-autocomplete";
 import { formatCurrency } from "@/lib/utils";
 import { createShipment, searchOrdersForShipment } from "./actions";
 
 type OrderResult = Awaited<ReturnType<typeof searchOrdersForShipment>>[number];
+
+/**
+ * Common AfterShip carrier slugs. Pulled from
+ * https://www.aftership.com/couriers - the full list has 1000+ entries; we
+ * surface the most-used global carriers here and fall back to a free-text
+ * tracking number for everything else.
+ */
+const AFTERSHIP_CARRIERS: { slug: string; label: string }[] = [
+  { slug: "fedex", label: "FedEx" },
+  { slug: "ups", label: "UPS" },
+  { slug: "dhl", label: "DHL Express" },
+  { slug: "dhl-global-mail", label: "DHL eCommerce" },
+  { slug: "usps", label: "USPS" },
+  { slug: "tnt", label: "TNT" },
+  { slug: "aramex", label: "Aramex" },
+  { slug: "dpd", label: "DPD" },
+  { slug: "gls", label: "GLS" },
+  { slug: "royal-mail", label: "Royal Mail" },
+  { slug: "china-post", label: "China Post" },
+  { slug: "ems", label: "EMS" },
+  { slug: "maersk", label: "Maersk" },
+  { slug: "msc", label: "MSC" },
+  { slug: "cma-cgm", label: "CMA CGM" },
+];
 
 export function NewShipmentButton({
   drivers,
@@ -59,6 +87,17 @@ export function NewShipmentButton({
   const [searching, setSearching] = React.useState(false);
   const [driverId, setDriverId] = React.useState<string>("__none__");
   const [vehicleId, setVehicleId] = React.useState<string>("__none__");
+  const [carrierSlug, setCarrierSlug] = React.useState<string>("__none__");
+  const [pickup, setPickup] = React.useState<LocationValue>({
+    name: "",
+    lat: null,
+    lng: null,
+  });
+  const [dropoff, setDropoff] = React.useState<LocationValue>({
+    name: "",
+    lat: null,
+    lng: null,
+  });
 
   React.useEffect(() => {
     if (!open) return;
@@ -84,6 +123,9 @@ export function NewShipmentButton({
       setQ("");
       setDriverId("__none__");
       setVehicleId("__none__");
+      setCarrierSlug("__none__");
+      setPickup({ name: "", lat: null, lng: null });
+      setDropoff({ name: "", lat: null, lng: null });
     }
   }, [open]);
 
@@ -101,9 +143,14 @@ export function NewShipmentButton({
       toast.error(t("selectOrders"));
       return;
     }
+    if (!pickup.name.trim() || !dropoff.name.trim()) {
+      toast.error(t("addressesRequired"));
+      return;
+    }
     const fd = new FormData(e.currentTarget);
     setLoading(true);
     try {
+      const carrier = carrierSlug === "__none__" ? null : carrierSlug;
       const res = await createShipment({
         orderIds: selected.map((s) => s.id),
         driverId: driverId === "__none__" ? null : driverId,
@@ -119,12 +166,19 @@ export function NewShipmentButton({
         plannedStart: (fd.get("plannedStart") as string) || null,
         plannedEnd: (fd.get("plannedEnd") as string) || null,
         notes: (fd.get("notes") as string) || null,
-        pickupAddress: String(fd.get("pickupAddress") ?? "").trim(),
+        pickupAddress: pickup.name.trim(),
         pickupCity: (fd.get("pickupCity") as string) || null,
         pickupCountry: (fd.get("pickupCountry") as string) || null,
-        dropoffAddress: String(fd.get("dropoffAddress") ?? "").trim(),
+        pickupLat: pickup.lat,
+        pickupLng: pickup.lng,
+        dropoffAddress: dropoff.name.trim(),
         dropoffCity: (fd.get("dropoffCity") as string) || null,
         dropoffCountry: (fd.get("dropoffCountry") as string) || null,
+        dropoffLat: dropoff.lat,
+        dropoffLng: dropoff.lng,
+        carrier,
+        externalTrackingNumber:
+          (fd.get("externalTrackingNumber") as string)?.trim() || null,
       });
       toast.success(t("statusChanged"));
       setOpen(false);
@@ -262,7 +316,12 @@ export function NewShipmentButton({
                   </Label>
                   <div className="grid gap-2 sm:grid-cols-3">
                     <Field label="Pickup address" className="sm:col-span-3">
-                      <Input name="pickupAddress" required className="h-9" />
+                      <LocationAutocomplete
+                        kind="address"
+                        value={pickup}
+                        onChange={setPickup}
+                        placeholder="Search pickup address…"
+                      />
                     </Field>
                     <Field label="Pickup city" className="sm:col-span-2">
                       <Input name="pickupCity" className="h-9" />
@@ -271,7 +330,12 @@ export function NewShipmentButton({
                       <Input name="pickupCountry" className="h-9" />
                     </Field>
                     <Field label="Dropoff address" className="sm:col-span-3">
-                      <Input name="dropoffAddress" required className="h-9" />
+                      <LocationAutocomplete
+                        kind="address"
+                        value={dropoff}
+                        onChange={setDropoff}
+                        placeholder="Search dropoff address…"
+                      />
                     </Field>
                     <Field label="Dropoff city" className="sm:col-span-2">
                       <Input name="dropoffCity" className="h-9" />
@@ -366,6 +430,42 @@ export function NewShipmentButton({
                           ))}
                         </SelectContent>
                       </Select>
+                    </Field>
+                  </div>
+                </div>
+
+                {/* External tracking (AfterShip) */}
+                <div className="space-y-2">
+                  <Label className="text-xs uppercase tracking-wide text-muted-foreground">
+                    External tracking
+                  </Label>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Field label="Carrier">
+                      <Select
+                        value={carrierSlug}
+                        onValueChange={setCarrierSlug}
+                      >
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder="Manual / no carrier" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">
+                            Manual / no carrier
+                          </SelectItem>
+                          {AFTERSHIP_CARRIERS.map((c) => (
+                            <SelectItem key={c.slug} value={c.slug}>
+                              {c.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field label="Tracking number">
+                      <Input
+                        name="externalTrackingNumber"
+                        placeholder="e.g. 1Z999AA10123456784"
+                        className="h-9"
+                      />
                     </Field>
                   </div>
                 </div>

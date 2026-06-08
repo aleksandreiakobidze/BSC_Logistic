@@ -72,22 +72,27 @@ export function Combobox({
       );
       return;
     }
+    if (!open) return;
+    let cancelled = false;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
+      if (cancelled) return;
       setLoading(true);
       try {
         const res = await onSearch(query);
-        setItems(res);
-      } catch {
-        setItems([]);
+        if (!cancelled) setItems(res);
+      } catch (err) {
+        console.error("[Combobox] search failed", err);
+        if (!cancelled) setItems([]);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     }, 250);
     return () => {
+      cancelled = true;
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query, onSearch, initialOptions]);
+  }, [query, onSearch, initialOptions, open]);
 
   const selected = React.useMemo(
     () => [...initialOptions, ...items].find((o) => o.value === value),

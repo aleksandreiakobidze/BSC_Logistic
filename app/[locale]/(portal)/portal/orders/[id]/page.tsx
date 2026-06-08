@@ -154,7 +154,7 @@ export default async function PortalOrderDetailPage({
                     <TableRow key={s.id}>
                       <TableCell>
                         <Link
-                          href={`/${locale}/portal/track/${s.trackingCode}`}
+                          href={`/${locale}/portal/shipments/${s.id}`}
                           className="font-mono text-primary hover:underline"
                         >
                           {s.trackingCode}

@@ -22,6 +22,10 @@ import {
 import { recomputeQuotationTotals, snapshotQuotation } from "@/lib/quotations";
 import { sendEmail } from "@/lib/mail";
 import { publishQuotationEvent } from "@/lib/quotation-events";
+import {
+  diffFields,
+  recordQuotationFieldChanges,
+} from "@/lib/quotation-activity-diff";
 
 // ─── RFQ Header ─────────────────────────────────────────────────────────────
 
@@ -37,9 +41,17 @@ const rfqHeaderSchema = z.object({
     .nullable()
     .optional(),
   originPort: z.string().nullable().optional(),
+  originPortLat: z.coerce.number().nullable().optional(),
+  originPortLng: z.coerce.number().nullable().optional(),
   originAddress: z.string().nullable().optional(),
+  originAddressLat: z.coerce.number().nullable().optional(),
+  originAddressLng: z.coerce.number().nullable().optional(),
   destinationPort: z.string().nullable().optional(),
+  destinationPortLat: z.coerce.number().nullable().optional(),
+  destinationPortLng: z.coerce.number().nullable().optional(),
   destinationAddress: z.string().nullable().optional(),
+  destinationAddressLat: z.coerce.number().nullable().optional(),
+  destinationAddressLng: z.coerce.number().nullable().optional(),
   cargoDescription: z.string().nullable().optional(),
   shipmentDetails: z.string().nullable().optional(),
   cargoValue: z.coerce.number().nullable().optional(),
@@ -62,6 +74,32 @@ function normaliseTeams(input?: string[] | null): string | null {
   return seen.size === 0 ? null : Array.from(seen).join(",");
 }
 
+const RFQ_HEADER_FIELDS = [
+  "salesManagerId",
+  "requestedTeams",
+  "priority",
+  "mode",
+  "incoterms",
+  "originPort",
+  "originPortLat",
+  "originPortLng",
+  "originAddress",
+  "originAddressLat",
+  "originAddressLng",
+  "destinationPort",
+  "destinationPortLat",
+  "destinationPortLng",
+  "destinationAddress",
+  "destinationAddressLat",
+  "destinationAddressLng",
+  "cargoDescription",
+  "shipmentDetails",
+  "cargoValue",
+  "cargoValueCurrency",
+  "cargoReadyDate",
+  "specialRequirements",
+] as const;
+
 export async function updateRfqHeader(
   quotationId: string,
   input: UpdateRfqHeaderInput,
@@ -71,7 +109,33 @@ export async function updateRfqHeader(
 
   const existing = await prisma.quotation.findFirstOrThrow({
     where: { id: quotationId, orgId },
-    select: { id: true, status: true },
+    select: {
+      id: true,
+      status: true,
+      salesManagerId: true,
+      requestedTeams: true,
+      priority: true,
+      mode: true,
+      incoterms: true,
+      originPort: true,
+      originPortLat: true,
+      originPortLng: true,
+      originAddress: true,
+      originAddressLat: true,
+      originAddressLng: true,
+      destinationPort: true,
+      destinationPortLat: true,
+      destinationPortLng: true,
+      destinationAddress: true,
+      destinationAddressLat: true,
+      destinationAddressLng: true,
+      cargoDescription: true,
+      shipmentDetails: true,
+      cargoValue: true,
+      cargoValueCurrency: true,
+      cargoReadyDate: true,
+      specialRequirements: true,
+    },
   });
 
   if (
@@ -82,35 +146,140 @@ export async function updateRfqHeader(
     throw new Error("RFQ header is locked at this status");
   }
 
-  await prisma.quotation.update({
-    where: { id: quotationId },
-    data: {
+  const nextRequestedTeams =
+    data.requestedTeams === undefined
+      ? undefined
+      : normaliseTeams(data.requestedTeams);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.quotation.update({
+      where: { id: quotationId },
+      data: {
+        salesManagerId:
+          data.salesManagerId === undefined
+            ? undefined
+            : data.salesManagerId || null,
+        requestedTeams: nextRequestedTeams,
+        priority: data.priority,
+        mode: data.mode === undefined ? undefined : data.mode || null,
+        incoterms:
+          data.incoterms === undefined ? undefined : data.incoterms || null,
+        originPort:
+          data.originPort === undefined ? undefined : data.originPort || null,
+        originPortLat:
+          data.originPortLat === undefined ? undefined : data.originPortLat,
+        originPortLng:
+          data.originPortLng === undefined ? undefined : data.originPortLng,
+        originAddress:
+          data.originAddress === undefined
+            ? undefined
+            : data.originAddress || null,
+        originAddressLat:
+          data.originAddressLat === undefined
+            ? undefined
+            : data.originAddressLat,
+        originAddressLng:
+          data.originAddressLng === undefined
+            ? undefined
+            : data.originAddressLng,
+        destinationPort:
+          data.destinationPort === undefined
+            ? undefined
+            : data.destinationPort || null,
+        destinationPortLat:
+          data.destinationPortLat === undefined
+            ? undefined
+            : data.destinationPortLat,
+        destinationPortLng:
+          data.destinationPortLng === undefined
+            ? undefined
+            : data.destinationPortLng,
+        destinationAddress:
+          data.destinationAddress === undefined
+            ? undefined
+            : data.destinationAddress || null,
+        destinationAddressLat:
+          data.destinationAddressLat === undefined
+            ? undefined
+            : data.destinationAddressLat,
+        destinationAddressLng:
+          data.destinationAddressLng === undefined
+            ? undefined
+            : data.destinationAddressLng,
+        cargoDescription:
+          data.cargoDescription === undefined
+            ? undefined
+            : data.cargoDescription || null,
+        shipmentDetails:
+          data.shipmentDetails === undefined
+            ? undefined
+            : data.shipmentDetails || null,
+        cargoValue: data.cargoValue === undefined ? undefined : data.cargoValue,
+        cargoValueCurrency:
+          data.cargoValueCurrency === undefined
+            ? undefined
+            : data.cargoValueCurrency || null,
+        cargoReadyDate:
+          data.cargoReadyDate === undefined ? undefined : data.cargoReadyDate,
+        specialRequirements:
+          data.specialRequirements === undefined
+            ? undefined
+            : data.specialRequirements || null,
+      },
+    });
+
+    const after: Record<string, unknown> = {
       salesManagerId:
         data.salesManagerId === undefined
           ? undefined
           : data.salesManagerId || null,
-      requestedTeams:
-        data.requestedTeams === undefined
-          ? undefined
-          : normaliseTeams(data.requestedTeams),
+      requestedTeams: nextRequestedTeams,
       priority: data.priority,
       mode: data.mode === undefined ? undefined : data.mode || null,
       incoterms:
         data.incoterms === undefined ? undefined : data.incoterms || null,
       originPort:
         data.originPort === undefined ? undefined : data.originPort || null,
+      originPortLat:
+        data.originPortLat === undefined ? undefined : data.originPortLat,
+      originPortLng:
+        data.originPortLng === undefined ? undefined : data.originPortLng,
       originAddress:
         data.originAddress === undefined
           ? undefined
           : data.originAddress || null,
+      originAddressLat:
+        data.originAddressLat === undefined
+          ? undefined
+          : data.originAddressLat,
+      originAddressLng:
+        data.originAddressLng === undefined
+          ? undefined
+          : data.originAddressLng,
       destinationPort:
         data.destinationPort === undefined
           ? undefined
           : data.destinationPort || null,
+      destinationPortLat:
+        data.destinationPortLat === undefined
+          ? undefined
+          : data.destinationPortLat,
+      destinationPortLng:
+        data.destinationPortLng === undefined
+          ? undefined
+          : data.destinationPortLng,
       destinationAddress:
         data.destinationAddress === undefined
           ? undefined
           : data.destinationAddress || null,
+      destinationAddressLat:
+        data.destinationAddressLat === undefined
+          ? undefined
+          : data.destinationAddressLat,
+      destinationAddressLng:
+        data.destinationAddressLng === undefined
+          ? undefined
+          : data.destinationAddressLng,
       cargoDescription:
         data.cargoDescription === undefined
           ? undefined
@@ -130,7 +299,21 @@ export async function updateRfqHeader(
         data.specialRequirements === undefined
           ? undefined
           : data.specialRequirements || null,
-    },
+    };
+
+    const changes = diffFields(
+      existing as Record<string, unknown>,
+      after,
+      RFQ_HEADER_FIELDS as unknown as string[],
+      { commaListFields: ["requestedTeams"] },
+    );
+
+    await recordQuotationFieldChanges(tx, {
+      quotationId,
+      userId: session.user.id,
+      entity: "RFQ",
+      changes,
+    });
   });
 
   await audit({
@@ -235,6 +418,19 @@ export async function addSupplierOffer(input: AddSupplierOfferInput) {
 
 const updateOfferSchema = supplierOfferSchema.partial();
 
+const SUPPLIER_OFFER_FIELDS = [
+  "supplierId",
+  "team",
+  "managerUserId",
+  "totalCost",
+  "currency",
+  "transitTimeDays",
+  "incoterms",
+  "validUntil",
+  "terms",
+  "notes",
+] as const;
+
 export async function updateSupplierOffer(
   offerId: string,
   input: z.input<typeof updateOfferSchema>,
@@ -245,17 +441,35 @@ export async function updateSupplierOffer(
   const offer = await loadOffer(offerId, orgId);
   ensureCanEditOffers(offer.quotation.status);
 
-  await prisma.supplierOffer.update({
-    where: { id: offerId },
-    data: {
+  const nextManagerUserId =
+    data.managerUserId === undefined
+      ? undefined
+      : data.managerUserId && data.managerUserId !== "none"
+        ? data.managerUserId
+        : null;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.supplierOffer.update({
+      where: { id: offerId },
+      data: {
+        supplierId: data.supplierId,
+        team: data.team,
+        managerUserId: nextManagerUserId,
+        totalCost: data.totalCost,
+        currency: data.currency,
+        transitTimeDays:
+          data.transitTimeDays === undefined ? undefined : data.transitTimeDays,
+        incoterms: data.incoterms === undefined ? undefined : data.incoterms,
+        validUntil: data.validUntil === undefined ? undefined : data.validUntil,
+        terms: data.terms === undefined ? undefined : data.terms,
+        notes: data.notes === undefined ? undefined : data.notes,
+      },
+    });
+
+    const after: Record<string, unknown> = {
       supplierId: data.supplierId,
       team: data.team,
-      managerUserId:
-        data.managerUserId === undefined
-          ? undefined
-          : data.managerUserId && data.managerUserId !== "none"
-            ? data.managerUserId
-            : null,
+      managerUserId: nextManagerUserId,
       totalCost: data.totalCost,
       currency: data.currency,
       transitTimeDays:
@@ -264,7 +478,21 @@ export async function updateSupplierOffer(
       validUntil: data.validUntil === undefined ? undefined : data.validUntil,
       terms: data.terms === undefined ? undefined : data.terms,
       notes: data.notes === undefined ? undefined : data.notes,
-    },
+    };
+
+    const changes = diffFields(
+      offer as unknown as Record<string, unknown>,
+      after,
+      SUPPLIER_OFFER_FIELDS as unknown as string[],
+    );
+
+    await recordQuotationFieldChanges(tx, {
+      quotationId: offer.quotationId,
+      userId: session.user.id,
+      entity: `Supplier offer (${offer.supplier.name} / ${offer.team})`,
+      entityId: offerId,
+      changes,
+    });
   });
 
   await audit({
@@ -299,41 +527,43 @@ export async function deleteSupplierOffer(offerId: string) {
 }
 
 /**
- * Promote one supplier offer to "winner" for its team, demoting any other
- * offer in the same `team` back to `RECEIVED`. Atomic — either everything
- * commits or nothing does.
+ * Toggle a supplier offer's selection flag. Each offer is independent —
+ * any combination (including multiple per team or multiple currencies)
+ * can be selected at the same time. Generate Quote will produce one line
+ * per selected offer.
  */
 export async function selectSupplierOffer(offerId: string) {
   const { session, orgId } = await requireRole(staffRoles);
   const offer = await loadOffer(offerId, orgId);
   ensureCanEditOffers(offer.quotation.status);
 
-  await prisma.$transaction(async (tx) => {
-    await tx.supplierOffer.updateMany({
-      where: {
-        quotationId: offer.quotationId,
-        team: offer.team,
-        id: { not: offerId },
-      },
-      data: { isSelected: false, status: SupplierOfferStatus.RECEIVED },
-    });
-    await tx.supplierOffer.update({
-      where: { id: offerId },
-      data: { isSelected: true, status: SupplierOfferStatus.SELECTED },
-    });
+  const nextIsSelected = !offer.isSelected;
+  const nextStatus = nextIsSelected
+    ? SupplierOfferStatus.SELECTED
+    : SupplierOfferStatus.RECEIVED;
+
+  await prisma.supplierOffer.update({
+    where: { id: offerId },
+    data: { isSelected: nextIsSelected, status: nextStatus },
   });
 
   await audit({
-    action: "quotation.supplierOffer.select",
+    action: nextIsSelected
+      ? "quotation.supplierOffer.select"
+      : "quotation.supplierOffer.deselect",
     entity: "SupplierOffer",
     entityId: offerId,
     orgId,
     userId: session.user.id,
-    meta: { quotationId: offer.quotationId, team: offer.team },
+    meta: {
+      quotationId: offer.quotationId,
+      team: offer.team,
+      isSelected: nextIsSelected,
+    },
   });
 
   revalidatePath(`/quotations/${offer.quotationId}`);
-  return { ok: true };
+  return { ok: true, isSelected: nextIsSelected };
 }
 
 const requestPricingSchema = z.object({
@@ -745,6 +975,7 @@ async function loadOffer(offerId: string, orgId: string) {
     where: { id: offerId },
     include: {
       quotation: { select: { orgId: true, status: true } },
+      supplier: { select: { id: true, name: true } },
     },
   });
   if (!offer) throw new Error("Supplier offer not found");

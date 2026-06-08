@@ -274,5 +274,6 @@ export const QuotationActivityKind = {
   STATUS_CHANGE: "STATUS_CHANGE",
   SUPPLIER_OFFER: "SUPPLIER_OFFER",
   RFQ_SENT: "RFQ_SENT",
+  FIELD_CHANGE: "FIELD_CHANGE",
 } as const;
 export type QuotationActivityKind = (typeof QuotationActivityKind)[keyof typeof QuotationActivityKind];

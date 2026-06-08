@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { useTranslations } from "next-intl";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -30,6 +31,8 @@ interface OfferTabProps {
     taxRate: number;
     total: number;
   };
+  actionsSlot?: React.ReactNode;
+  conversationSlot?: React.ReactNode;
 }
 
 /**
@@ -49,9 +52,12 @@ export function OfferTab({
   lines,
   lineMessages,
   totals,
+  actionsSlot,
+  conversationSlot,
 }: OfferTabProps) {
   const t = useTranslations();
-  return (
+  const hasAside = Boolean(actionsSlot || conversationSlot);
+  const main = (
     <div className="space-y-4">
       {showNegotiation && (
         <NegotiationPanel
@@ -100,6 +106,18 @@ export function OfferTab({
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+
+  if (!hasAside) return main;
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+      <div className="min-w-0">{main}</div>
+      <aside className="space-y-4 lg:sticky lg:top-6 lg:self-start lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto lg:pr-1">
+        {actionsSlot}
+        {conversationSlot}
+      </aside>
     </div>
   );
 }

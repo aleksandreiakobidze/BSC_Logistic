@@ -15,6 +15,7 @@
     "db:push": "prisma db push",
     "db:deploy": "prisma db push --skip-generate",
     "db:seed": "tsx prisma/seed.ts",
+    "db:seed:topup": "tsx scripts/seed-shipments-topup.ts",
     "db:studio": "prisma studio",
     "db:local:gen": "prisma generate --schema=prisma/schema.local.prisma",
     "db:local:reset": "prisma db push --force-reset --accept-data-loss --schema=prisma/schema.local.prisma && prisma generate --schema=prisma/schema.local.prisma && tsx prisma/seed.ts",

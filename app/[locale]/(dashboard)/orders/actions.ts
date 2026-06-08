@@ -5,8 +5,12 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireOrg } from "@/lib/actions";
 import { audit } from "@/lib/audit";
-import { generateNumber, generateTrackingCode } from "@/lib/utils";
-import { OrderStatus, ShipmentStatus, StopKind } from "@/lib/enums";
+import { generateNumber } from "@/lib/utils";
+import {
+  OrderStatus,
+  QuotationActivityKind,
+  QuotationStatus,
+} from "@/lib/enums";
 import { CustomFieldEntity } from "@/lib/custom-fields";
 import { saveCustomFieldValues } from "../settings/custom-fields/actions";
 import { applyOrderConfirmationSideEffects } from "../quotations/actions";
@@ -18,14 +22,6 @@ const orderSchema = z.object({
   currency: z.string().default("USD"),
   status: z.nativeEnum(OrderStatus).default(OrderStatus.QUOTE),
   notes: z.string().optional(),
-  pickupAddress: z.string().min(1),
-  pickupCity: z.string().optional(),
-  pickupCountry: z.string().optional(),
-  dropoffAddress: z.string().min(1),
-  dropoffCity: z.string().optional(),
-  dropoffCountry: z.string().optional(),
-  cargoType: z.string().optional(),
-  cargoWeightKg: z.coerce.number().min(0).optional(),
 });
 
 export async function createOrder(formData: FormData) {
@@ -51,48 +47,14 @@ export async function createOrder(formData: FormData) {
     formData,
   });
 
-  // Create an initial shipment with two stops, linked via the join table
-  const shipment = await prisma.shipment.create({
-    data: {
-      orgId,
-      number: generateNumber("SHP"),
-      trackingCode: generateTrackingCode(),
-      status: ShipmentStatus.PLANNED,
-      cargoType: data.cargoType || null,
-      cargoWeightKg: data.cargoWeightKg ?? null,
-      stops: {
-        create: [
-          {
-            sequence: 1,
-            kind: StopKind.PICKUP,
-            address: data.pickupAddress,
-            city: data.pickupCity || null,
-            country: data.pickupCountry || null,
-          },
-          {
-            sequence: 2,
-            kind: StopKind.DROPOFF,
-            address: data.dropoffAddress,
-            city: data.dropoffCity || null,
-            country: data.dropoffCountry || null,
-          },
-        ],
-      },
-      events: { create: { type: "CREATED", note: "Order & shipment created" } },
-      orderLinks: { create: { orderId: order.id, sortOrder: 0 } },
-    },
-  });
-
   await audit({
     action: "order.create",
     entity: "Order",
     entityId: order.id,
     orgId,
     userId: session.user.id,
-    meta: { shipmentId: shipment.id },
   });
   revalidatePath("/orders");
-  revalidatePath("/shipments");
   return { ok: true, id: order.id };
 }
 
@@ -146,4 +108,94 @@ export async function updateOrderStatus(id: string, status: OrderStatus) {
   if (sideEffects.wonLead) revalidatePath("/leads");
   if (sideEffects.wonQuotation) revalidatePath("/quotations");
   return { ok: true, ...sideEffects };
+}
+
+/**
+ * Send an order back to its source quotation in DRAFT mode.
+ *
+ * Only safe while the order has produced no fulfilment artifacts:
+ * status must still be QUOTE, and there must be zero shipments,
+ * invoices, or expenses linked to it. The order row is deleted -
+ * `OrderLine` cascades via the existing `onDelete: Cascade` relation.
+ */
+export async function revertOrderToQuotation(orderId: string) {
+  const { session, orgId } = await requireOrg();
+
+  const result = await prisma.$transaction(async (tx) => {
+    const order = await tx.order.findFirstOrThrow({
+      where: { id: orderId, orgId },
+      select: {
+        id: true,
+        number: true,
+        status: true,
+        sourceQuotationId: true,
+        _count: {
+          select: {
+            shipmentLinks: true,
+            invoices: true,
+            expenses: true,
+          },
+        },
+      },
+    });
+
+    if (order.status !== OrderStatus.QUOTE) {
+      throw new Error("Cannot revert: order is past QUOTE status");
+    }
+    if (order._count.shipmentLinks > 0) {
+      throw new Error("Cannot revert: this order has shipments");
+    }
+    if (order._count.invoices > 0) {
+      throw new Error("Cannot revert: this order has invoices");
+    }
+    if (order._count.expenses > 0) {
+      throw new Error("Cannot revert: this order has expenses");
+    }
+
+    const quotationId = order.sourceQuotationId;
+
+    if (quotationId) {
+      await tx.quotation.update({
+        where: { id: quotationId },
+        data: {
+          status: QuotationStatus.DRAFT,
+          convertedAt: null,
+        },
+      });
+      await tx.quotationActivity.create({
+        data: {
+          quotationId,
+          userId: session.user.id,
+          kind: QuotationActivityKind.STATUS_CHANGE,
+          note: `Reverted from order ${order.number} back to draft`,
+        },
+      });
+    }
+
+    await tx.order.delete({ where: { id: orderId } });
+
+    return { quotationId, orderNumber: order.number };
+  });
+
+  await audit({
+    action: "order.revertToQuotation",
+    entity: "Order",
+    entityId: orderId,
+    orgId,
+    userId: session.user.id,
+    meta: {
+      quotationId: result.quotationId,
+      orderNumber: result.orderNumber,
+    },
+  });
+
+  revalidatePath("/orders");
+  revalidatePath("/quotations");
+  revalidatePath("/portal/orders");
+  revalidatePath("/portal/quotations");
+  if (result.quotationId) {
+    revalidatePath(`/quotations/${result.quotationId}`);
+  }
+
+  return { ok: true, quotationId: result.quotationId };
 }

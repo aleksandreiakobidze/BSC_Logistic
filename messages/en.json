@@ -136,9 +136,40 @@
     "reference": "Reference",
     "lines": "Items",
     "fromQuotation": "From quotation {number}",
+    "createShipment": {
+      "button": "Create shipment",
+      "disabledHint": "Authorize the order to create a shipment",
+      "dialogDescription": "Authorize order {number} by creating a shipment for it. Fill in the route and any cargo details, optionally hook up an external carrier tracking number to enable AfterShip auto-updates.",
+      "success": "Shipment created"
+    },
+    "authorize": {
+      "button": "Authorize order",
+      "success": "Order authorized"
+    },
+    "markInProgress": {
+      "button": "Mark in progress",
+      "success": "Order moved to in progress"
+    },
+    "markCompleted": {
+      "button": "Mark completed",
+      "success": "Order completed"
+    },
+    "cancel": {
+      "button": "Cancel order",
+      "title": "Cancel this order?",
+      "confirm": "Order {number} will be marked as cancelled. This stops further work on it; existing shipments and invoices stay attached.",
+      "success": "Order cancelled"
+    },
+    "revertToQuotation": {
+      "button": "Revert to quotation",
+      "title": "Revert order to quotation?",
+      "confirmWithQuotation": "Order {number} will be deleted and its source quotation reopened in DRAFT mode. This is only allowed because no shipments, invoices or expenses are attached.",
+      "confirmNoQuotation": "Order {number} will be deleted. It has no shipments, invoices, or expenses attached.",
+      "success": "Order reverted to quotation"
+    },
     "status": {
       "QUOTE": "Quote",
-      "CONFIRMED": "Confirmed",
+      "CONFIRMED": "Authorized",
       "IN_PROGRESS": "In progress",
       "COMPLETED": "Completed",
       "CANCELLED": "Cancelled"
@@ -149,6 +180,8 @@
     "newShipment": "New shipment",
     "newShipmentDescription": "Pick one or more orders to consolidate into a single delivery.",
     "selectOrders": "Select order(s)",
+    "addressesRequired": "Pick a pickup and dropoff address",
+    "openShipment": "Open shipment",
     "searchOrders": "Search by order # or customer…",
     "noOrdersFound": "No orders match.",
     "ordersCard": "Orders on this shipment",
@@ -494,6 +527,9 @@
   },
   "portal": {
     "trackTitle": "Track your shipment",
+    "trackDescription": "Enter your tracking number below to see where your shipment is right now.",
+    "activeShipmentsMap": "Live shipments",
+    "noActiveShipments": "No active shipments to show on the map yet.",
     "trackPlaceholder": "Enter tracking number",
     "track": "Track",
     "noShipment": "We could not find that shipment.",
@@ -546,7 +582,10 @@
       "title": "Shipments",
       "empty": "No shipments yet",
       "emptyDesc": "Shipments for your orders will appear here.",
-      "allStatuses": "All statuses"
+      "allStatuses": "All statuses",
+      "publicTrack": "Public link",
+      "liveLocation": "Live location",
+      "liveLocationPending": "Live location will appear once the driver starts the shipment."
     },
     "reports": {
       "title": "Reports & Analytics",
@@ -824,11 +863,12 @@
       "transitTime": "T/T",
       "select": "Select",
       "selected": "Selected",
+      "selectToggle": "Toggle selection",
       "addOffer": "Add supplier offer",
       "requestRevision": "Request revision",
       "compare": "Compare",
       "noOffers": "No supplier offers yet. Add the first bid to start tendering.",
-      "selectWinnerHint": "Pick one offer per team to mark it as the winner.",
+      "selectWinnerHint": "Pick one or more supplier offers to include in the customer quote.",
       "salesManager": "Sales manager",
       "requestedTeams": "Requested teams",
       "priority": "Priority",
@@ -851,7 +891,8 @@
       "offerAdded": "Supplier offer added",
       "offerUpdated": "Supplier offer updated",
       "offerDeleted": "Supplier offer removed",
-      "offerSelected": "Selected as winner",
+      "offerSelected": "Added to selection",
+      "offerDeselected": "Removed from selection",
       "requestPricingTitle": "Request pricing from suppliers",
       "requestPricingDescription": "An RFQ email with the lane details will be sent to each selected supplier.",
       "requestPricingMessage": "Optional message",
@@ -871,6 +912,16 @@
       "newActivity": "Add a note",
       "activityPlaceholder": "What happened?",
       "activityEmpty": "No activity yet. Notes and system events will appear here.",
+      "workspaceTitle": "RFQ workspace",
+      "kpiTotalOffers": "Total offers",
+      "kpiSelected": "Selected",
+      "kpiLowest": "Lowest cost",
+      "kpiFastest": "Fastest transit",
+      "teamsLabel": "teams",
+      "allTeams": "All",
+      "allCurrencies": "All",
+      "cheapest": "Cheapest",
+      "fastest": "Fastest",
       "teams": {
         "SEA": "Sea",
         "LAND": "Land",
@@ -886,7 +937,8 @@
         "MEETING": "Meeting",
         "STATUS_CHANGE": "Status change",
         "SUPPLIER_OFFER": "Supplier offer",
-        "RFQ_SENT": "RFQ sent"
+        "RFQ_SENT": "RFQ sent",
+        "FIELD_CHANGE": "Field change"
       }
     },
     "portal": {

@@ -67,9 +67,12 @@ export default async function ItemsPage({
         title={tx("items.title", "Items")}
         description={
           rows.length > 0
-            ? tx("items.summary", "{count} items · {currencies} currencies")
-                .replace("{count}", String(rows.length))
-                .replace("{currencies}", String(currencies.length))
+            ? t.has("items.summary")
+              ? t("items.summary", {
+                  count: rows.length,
+                  currencies: currencies.length,
+                })
+              : `${rows.length} items · ${currencies.length} currencies`
             : tx(
                 "items.subtitle",
                 "Catalog of products and services you sell. Items are reusable across quotations, orders and invoices.",

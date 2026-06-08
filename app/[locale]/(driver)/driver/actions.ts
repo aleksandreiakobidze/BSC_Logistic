@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { getSessionOrRedirect } from "@/lib/actions";
 import { audit } from "@/lib/audit";
 import { ShipmentStatus } from "@/lib/enums";
+import { publishShipmentEvent } from "@/lib/shipment-events";
 
 async function requireDriverShipment(shipmentId: string) {
   const session = await getSessionOrRedirect();
@@ -35,16 +36,23 @@ export async function driverUpdateStatus(shipmentId: string, status: ShipmentSta
     userId: session.user.id,
     meta: { status },
   });
+  publishShipmentEvent(shipmentId, { type: "STATUS_CHANGE", status });
   revalidatePath("/driver");
   revalidatePath(`/driver/${shipmentId}`);
+  revalidatePath(`/shipments/${shipmentId}`);
+  revalidatePath(`/portal/shipments/${shipmentId}`);
+  revalidatePath(`/portal/track/${shipment.trackingCode}`);
   return { ok: true };
 }
 
 export async function driverReportLocation(shipmentId: string, lat: number, lng: number) {
-  const { session, shipment } = await requireDriverShipment(shipmentId);
+  const { shipment } = await requireDriverShipment(shipmentId);
   await prisma.shipmentEvent.create({
     data: { shipmentId, type: "LOCATION", lat, lng, note: "driver ping" },
   });
+  publishShipmentEvent(shipmentId, { type: "LOCATION_UPDATE", lat, lng });
+  revalidatePath(`/portal/shipments/${shipmentId}`);
+  revalidatePath(`/portal/track/${shipment.trackingCode}`);
   return { ok: true };
 }
 
@@ -71,7 +79,11 @@ export async function driverUploadPOD(
     orgId: shipment.orgId,
     userId: session.user.id,
   });
+  publishShipmentEvent(shipmentId, { type: "POD_UPLOADED" });
   revalidatePath("/driver");
   revalidatePath(`/driver/${shipmentId}`);
+  revalidatePath(`/shipments/${shipmentId}`);
+  revalidatePath(`/portal/shipments/${shipmentId}`);
+  revalidatePath(`/portal/track/${shipment.trackingCode}`);
   return { ok: true };
 }

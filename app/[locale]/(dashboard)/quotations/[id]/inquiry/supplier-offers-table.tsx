@@ -23,13 +23,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { formatCurrency } from "@/lib/utils";
 import {
   QuotationStatus,
@@ -83,6 +76,7 @@ export function SupplierOffersTable({
   locale,
 }: SupplierOffersTableProps) {
   const t = useTranslations();
+  const tx = (k: string, fb: string) => (t.has(k) ? t(k) : fb);
   const router = useRouter();
   const [teamFilter, setTeamFilter] = React.useState<string>("ALL");
   const [currencyFilter, setCurrencyFilter] = React.useState<string>("ALL");
@@ -122,8 +116,12 @@ export function SupplierOffersTable({
   async function onSelect(id: string) {
     setBusyId(id);
     try {
-      await selectSupplierOffer(id);
-      toast.success(t("quotations.inquiry.offerSelected"));
+      const res = await selectSupplierOffer(id);
+      toast.success(
+        res.isSelected
+          ? t("quotations.inquiry.offerSelected")
+          : t("quotations.inquiry.offerDeselected"),
+      );
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : t("common.error"));
@@ -147,61 +145,79 @@ export function SupplierOffersTable({
 
   return (
     <Card>
-      <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <CardTitle className="text-sm font-medium">
-          {t("quotations.inquiry.supplierOffers")}
-        </CardTitle>
-        <div className="flex flex-wrap items-center gap-2">
+      <CardHeader className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <CardTitle className="text-sm font-medium">
+            {t("quotations.inquiry.supplierOffers")}
+          </CardTitle>
           <div className="flex items-center gap-1">
-            <Select value={teamFilter} onValueChange={setTeamFilter}>
-              <SelectTrigger className="h-8 w-[120px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">{t("quotations.inquiry.team")}</SelectItem>
-                {TEAMS.map((te) => (
-                  <SelectItem key={te} value={te}>
-                    {t(`quotations.inquiry.teams.${te}`)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={currencyFilter} onValueChange={setCurrencyFilter}>
-              <SelectTrigger className="h-8 w-[100px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ALL">{t("common.currency")}</SelectItem>
-                {currencies.map((c) => (
-                  <SelectItem key={c} value={c}>
-                    {c}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-1">
-            <Button
-              size="sm"
-              variant={sort === "cheapest" ? "default" : "outline"}
+            <Pill
+              active={sort === "cheapest"}
+              icon={<ListOrdered className="h-3.5 w-3.5" />}
               onClick={() =>
                 setSort((s) => (s === "cheapest" ? "default" : "cheapest"))
               }
             >
-              <ListOrdered className="h-4 w-4" />
-              Cheapest
-            </Button>
-            <Button
-              size="sm"
-              variant={sort === "fastest" ? "default" : "outline"}
+              {tx("quotations.inquiry.cheapest", "Cheapest")}
+            </Pill>
+            <Pill
+              active={sort === "fastest"}
+              icon={<Timer className="h-3.5 w-3.5" />}
               onClick={() =>
                 setSort((s) => (s === "fastest" ? "default" : "fastest"))
               }
             >
-              <Timer className="h-4 w-4" />
-              Fastest
-            </Button>
+              {tx("quotations.inquiry.fastest", "Fastest")}
+            </Pill>
           </div>
+        </div>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+              {t("quotations.inquiry.team")}
+            </span>
+            <Pill
+              active={teamFilter === "ALL"}
+              onClick={() => setTeamFilter("ALL")}
+            >
+              {tx("quotations.inquiry.allTeams", "All")}
+            </Pill>
+            {TEAMS.map((te) => (
+              <Pill
+                key={te}
+                active={teamFilter === te}
+                onClick={() =>
+                  setTeamFilter((cur) => (cur === te ? "ALL" : te))
+                }
+              >
+                {t(`quotations.inquiry.teams.${te}`)}
+              </Pill>
+            ))}
+          </div>
+          {currencies.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="mr-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+                {t("common.currency")}
+              </span>
+              <Pill
+                active={currencyFilter === "ALL"}
+                onClick={() => setCurrencyFilter("ALL")}
+              >
+                {tx("quotations.inquiry.allCurrencies", "All")}
+              </Pill>
+              {currencies.map((c) => (
+                <Pill
+                  key={c}
+                  active={currencyFilter === c}
+                  onClick={() =>
+                    setCurrencyFilter((cur) => (cur === c ? "ALL" : c))
+                  }
+                >
+                  {c}
+                </Pill>
+              ))}
+            </div>
+          )}
         </div>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -293,7 +309,7 @@ export function SupplierOffersTable({
                       <Button
                         size="icon"
                         variant={offer.isSelected ? "default" : "ghost"}
-                        title={t("quotations.inquiry.select")}
+                        title={t("quotations.inquiry.selectToggle")}
                         disabled={!editable || busyId === offer.id}
                         onClick={() => onSelect(offer.id)}
                       >
@@ -358,5 +374,32 @@ export function SupplierOffersTable({
         />
       </CardContent>
     </Card>
+  );
+}
+
+function Pill({
+  active,
+  icon,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  icon?: React.ReactNode;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs transition-colors ${
+        active
+          ? "border-primary bg-primary/10 text-primary"
+          : "border-border bg-background text-muted-foreground hover:bg-muted"
+      }`}
+    >
+      {icon}
+      {children}
+    </button>
   );
 }

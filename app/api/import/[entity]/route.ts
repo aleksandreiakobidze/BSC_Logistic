@@ -4,13 +4,8 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { parseSheetFromBuffer } from "@/lib/excel";
-import {
-  CustomerStatus,
-  OrderStatus,
-  ShipmentStatus,
-  StopKind,
-} from "@/lib/enums";
-import { generateNumber, generateTrackingCode } from "@/lib/utils";
+import { CustomerStatus, OrderStatus } from "@/lib/enums";
+import { generateNumber } from "@/lib/utils";
 import {
   CustomFieldType,
   type CustomFieldEntity,
@@ -46,8 +41,9 @@ type ImportResponse = {
  * multipart/form-data with `file` (xlsx/csv). Parses the first sheet,
  * matches headers (case/space-insensitive, ignoring trailing "*") to
  * effective fields, validates each row, and creates Customers or
- * Orders (with their initial Shipment + Stops). Custom-field values are
- * persisted via the existing `saveCustomFieldValues` helper.
+ * Orders. Shipments are no longer created from the order import - they are
+ * produced by the explicit "Authorize -> Create shipment" employer action.
+ * Custom-field values are persisted via `saveCustomFieldValues`.
  *
  * Returns a per-row report so the UI can show successes and failures
  * without aborting on the first error.
@@ -334,40 +330,21 @@ async function createOrderRow(
     },
   });
 
-  // Mirror createOrder in orders/actions.ts: every imported order gets an
-  // initial Shipment + pickup/dropoff Stops + CREATED event, linked via the join table.
-  await prisma.shipment.create({
-    data: {
-      orgId,
-      number: generateNumber("SHP"),
-      trackingCode: generateTrackingCode(),
-      status: ShipmentStatus.PLANNED,
-      cargoType: (builtin.cargoType as string | null) || null,
-      cargoWeightKg: (builtin.cargoWeightKg as number | null) ?? null,
-      stops: {
-        create: [
-          {
-            sequence: 1,
-            kind: StopKind.PICKUP,
-            address: builtin.pickupAddress as string,
-            city: (builtin.pickupCity as string | null) || null,
-            country: (builtin.pickupCountry as string | null) || null,
-          },
-          {
-            sequence: 2,
-            kind: StopKind.DROPOFF,
-            address: builtin.dropoffAddress as string,
-            city: (builtin.dropoffCity as string | null) || null,
-            country: (builtin.dropoffCountry as string | null) || null,
-          },
-        ],
-      },
-      events: {
-        create: { type: "CREATED", note: "Order & shipment imported" },
-      },
-      orderLinks: { create: { orderId: order.id, sortOrder: 0 } },
-    },
-  });
+  // Orders no longer auto-create shipments. Shipments are produced by an
+  // explicit "Authorize -> Create shipment" action on the order detail page.
+  // If the CSV row carries shipment-shaped fields (legacy template), warn
+  // once so the importer notices and re-issues them via the shipment importer.
+  if (
+    builtin.pickupAddress ||
+    builtin.dropoffAddress ||
+    builtin.cargoType ||
+    builtin.cargoWeightKg
+  ) {
+    console.warn(
+      "[import] Order row %s carried shipment fields; ignored. Create the shipment from the order detail page.",
+      order.number,
+    );
+  }
 
   const cfFormData = buildCustomFieldFormData(fields, values);
   await saveCustomFieldValues({

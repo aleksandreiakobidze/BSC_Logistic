@@ -6,8 +6,13 @@ import { prisma } from "@/lib/db";
 import { requireOrg } from "@/lib/actions";
 import { audit } from "@/lib/audit";
 import { enqueueNotification } from "@/lib/queue";
-import { ShipmentStatus, StopKind } from "@/lib/enums";
+import { OrderStatus, ShipmentStatus, StopKind } from "@/lib/enums";
 import { generateNumber, generateTrackingCode } from "@/lib/utils";
+import {
+  registerAftershipTracking,
+  isAftershipConfigured,
+} from "@/lib/aftership";
+import { publishShipmentEvent } from "@/lib/shipment-events";
 
 export async function assignShipment(
   shipmentId: string,
@@ -54,9 +59,12 @@ export async function assignShipment(
       body: `You've been assigned shipment ${shipment.number}${customers ? ` for ${customers}` : ""}.`,
     });
   }
+  publishShipmentEvent(shipmentId, { type: "ASSIGNED" });
   revalidatePath(`/shipments/${shipmentId}`);
   revalidatePath("/shipments");
   revalidatePath("/dispatch");
+  revalidatePath(`/portal/shipments/${shipmentId}`);
+  revalidatePath(`/portal/track/${shipment.trackingCode}`);
   return { ok: true };
 }
 
@@ -68,7 +76,13 @@ export async function updateShipmentStatus(
   const { session, orgId } = await requireOrg();
   const existing = await prisma.shipment.findFirst({
     where: { id: shipmentId, orgId },
-    select: { id: true, status: true, startedAt: true, completedAt: true },
+    select: {
+      id: true,
+      status: true,
+      startedAt: true,
+      completedAt: true,
+      trackingCode: true,
+    },
   });
   if (!existing) throw new Error("Shipment not found");
 
@@ -119,10 +133,13 @@ export async function updateShipmentStatus(
     userId: session.user.id,
     meta: { from: existing.status, to: status },
   });
+  publishShipmentEvent(shipmentId, { type: "STATUS_CHANGE", status });
   revalidatePath(`/shipments/${shipmentId}`);
   revalidatePath("/shipments");
   revalidatePath("/driver");
   revalidatePath("/dispatch");
+  revalidatePath(`/portal/shipments/${shipmentId}`);
+  revalidatePath(`/portal/track/${existing.trackingCode}`);
   return { ok: true };
 }
 
@@ -140,9 +157,15 @@ const createShipmentSchema = z.object({
   pickupAddress: z.string().min(1),
   pickupCity: z.string().optional().nullable(),
   pickupCountry: z.string().optional().nullable(),
+  pickupLat: z.coerce.number().nullable().optional(),
+  pickupLng: z.coerce.number().nullable().optional(),
   dropoffAddress: z.string().min(1),
   dropoffCity: z.string().optional().nullable(),
   dropoffCountry: z.string().optional().nullable(),
+  dropoffLat: z.coerce.number().nullable().optional(),
+  dropoffLng: z.coerce.number().nullable().optional(),
+  carrier: z.string().optional().nullable(),
+  externalTrackingNumber: z.string().optional().nullable(),
 });
 
 export async function createShipment(input: z.infer<typeof createShipmentSchema>) {
@@ -158,6 +181,8 @@ export async function createShipment(input: z.infer<typeof createShipmentSchema>
   }
 
   const driverId = data.driverId || null;
+  const carrier = data.carrier?.trim() || null;
+  const externalTrackingNumber = data.externalTrackingNumber?.trim() || null;
 
   const shipment = await prisma.shipment.create({
     data: {
@@ -174,6 +199,9 @@ export async function createShipment(input: z.infer<typeof createShipmentSchema>
       plannedStart: data.plannedStart ? new Date(data.plannedStart) : null,
       plannedEnd: data.plannedEnd ? new Date(data.plannedEnd) : null,
       notes: data.notes || null,
+      carrier,
+      externalTrackingNumber,
+      externalProvider: externalTrackingNumber ? "aftership" : null,
       stops: {
         create: [
           {
@@ -182,6 +210,8 @@ export async function createShipment(input: z.infer<typeof createShipmentSchema>
             address: data.pickupAddress,
             city: data.pickupCity || null,
             country: data.pickupCountry || null,
+            lat: data.pickupLat ?? null,
+            lng: data.pickupLng ?? null,
           },
           {
             sequence: 2,
@@ -189,6 +219,8 @@ export async function createShipment(input: z.infer<typeof createShipmentSchema>
             address: data.dropoffAddress,
             city: data.dropoffCity || null,
             country: data.dropoffCountry || null,
+            lat: data.dropoffLat ?? null,
+            lng: data.dropoffLng ?? null,
           },
         ],
       },
@@ -204,6 +236,26 @@ export async function createShipment(input: z.infer<typeof createShipmentSchema>
     },
   });
 
+  // Register the tracking with AfterShip if configured. Failures must NOT
+  // block shipment creation - we just log and carry on. The webhook will
+  // backfill events as soon as AfterShip starts polling the carrier.
+  if (carrier && externalTrackingNumber && isAftershipConfigured()) {
+    try {
+      const tracking = await registerAftershipTracking({
+        slug: carrier,
+        trackingNumber: externalTrackingNumber,
+      });
+      if (tracking?.id) {
+        await prisma.shipment.update({
+          where: { id: shipment.id },
+          data: { externalTrackingId: tracking.id },
+        });
+      }
+    } catch (err) {
+      console.error("[aftership] registration failed", err);
+    }
+  }
+
   await audit({
     action: "shipment.create",
     entity: "Shipment",
@@ -213,16 +265,75 @@ export async function createShipment(input: z.infer<typeof createShipmentSchema>
     meta: { orderIds: data.orderIds },
   });
 
+  publishShipmentEvent(shipment.id, { type: "CREATED" });
   revalidatePath("/shipments");
   revalidatePath("/dispatch");
+  revalidatePath(`/portal/shipments/${shipment.id}`);
+  revalidatePath(`/portal/track/${shipment.trackingCode}`);
   for (const o of data.orderIds) revalidatePath(`/orders/${o}`);
   return { ok: true, id: shipment.id };
+}
+
+const createShipmentFromOrderSchema = z.object({
+  driverId: z.string().optional().nullable(),
+  vehicleId: z.string().optional().nullable(),
+  cargoType: z.string().optional().nullable(),
+  cargoWeightKg: z.coerce.number().min(0).optional().nullable(),
+  cargoVolumeM3: z.coerce.number().min(0).optional().nullable(),
+  temperature: z.string().optional().nullable(),
+  plannedStart: z.string().optional().nullable(),
+  plannedEnd: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  pickupAddress: z.string().min(1),
+  pickupCity: z.string().optional().nullable(),
+  pickupCountry: z.string().optional().nullable(),
+  pickupLat: z.coerce.number().nullable().optional(),
+  pickupLng: z.coerce.number().nullable().optional(),
+  dropoffAddress: z.string().min(1),
+  dropoffCity: z.string().optional().nullable(),
+  dropoffCountry: z.string().optional().nullable(),
+  dropoffLat: z.coerce.number().nullable().optional(),
+  dropoffLng: z.coerce.number().nullable().optional(),
+  carrier: z.string().optional().nullable(),
+  externalTrackingNumber: z.string().optional().nullable(),
+});
+
+/**
+ * Authorize an order by creating a shipment for it.
+ *
+ * The order must be past QUOTE - employer has explicitly confirmed it - and
+ * not already cancelled. Acts as a thin wrapper around `createShipment`,
+ * pre-binding `orderIds: [orderId]`.
+ */
+export async function createShipmentFromOrder(
+  orderId: string,
+  input: z.infer<typeof createShipmentFromOrderSchema>,
+) {
+  const { orgId } = await requireOrg();
+  const data = createShipmentFromOrderSchema.parse(input);
+
+  const order = await prisma.order.findFirst({
+    where: { id: orderId, orgId },
+    select: { id: true, status: true },
+  });
+  if (!order) throw new Error("Order not found");
+  if (order.status === OrderStatus.QUOTE) {
+    throw new Error("Authorize the order first");
+  }
+  if (order.status === OrderStatus.CANCELLED) {
+    throw new Error("Cannot create shipment for a cancelled order");
+  }
+
+  return createShipment({ ...data, orderIds: [orderId] });
 }
 
 export async function addOrderToShipment(shipmentId: string, orderId: string) {
   const { session, orgId } = await requireOrg();
   const [shipment, order] = await Promise.all([
-    prisma.shipment.findFirst({ where: { id: shipmentId, orgId }, select: { id: true } }),
+    prisma.shipment.findFirst({
+      where: { id: shipmentId, orgId },
+      select: { id: true, trackingCode: true },
+    }),
     prisma.order.findFirst({ where: { id: orderId, orgId }, select: { id: true } }),
   ]);
   if (!shipment) throw new Error("Shipment not found");
@@ -252,8 +363,11 @@ export async function addOrderToShipment(shipmentId: string, orderId: string) {
     userId: session.user.id,
     meta: { orderId },
   });
+  publishShipmentEvent(shipmentId, { type: "ORDER_ADDED" });
   revalidatePath(`/shipments/${shipmentId}`);
   revalidatePath(`/orders/${orderId}`);
+  revalidatePath(`/portal/shipments/${shipmentId}`);
+  revalidatePath(`/portal/track/${shipment.trackingCode}`);
   return { ok: true };
 }
 
@@ -325,7 +439,10 @@ export async function removeOrderFromShipment(shipmentId: string, orderId: strin
     userId: session.user.id,
     meta: { orderId },
   });
+  publishShipmentEvent(shipmentId, { type: "ORDER_REMOVED" });
   revalidatePath(`/shipments/${shipmentId}`);
   revalidatePath(`/orders/${orderId}`);
+  revalidatePath(`/portal/shipments/${shipmentId}`);
+  revalidatePath(`/portal/track/${shipment.trackingCode}`);
   return { ok: true };
 }

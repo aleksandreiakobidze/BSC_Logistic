@@ -67,6 +67,10 @@ const schema = z.object({
 
   // Inbound quote-request mailbox
   QUOTE_INBOX: z.string().email().optional(),
+
+  // External tracking (AfterShip)
+  AFTERSHIP_API_KEY: z.string().optional(),
+  AFTERSHIP_WEBHOOK_SECRET: z.string().optional(),
 });
 
 export type Env = z.infer<typeof schema>;

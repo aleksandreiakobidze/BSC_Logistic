@@ -184,6 +184,40 @@ export default async function ShipmentDetailPage({
               />
             </CardContent>
           </Card>
+
+          {(s.carrier || s.externalTrackingNumber) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>External tracking</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2 text-sm">
+                <Row label="Carrier" value={s.carrier ?? "—"} />
+                <Row
+                  label="Tracking #"
+                  value={
+                    s.externalTrackingNumber ? (
+                      <span className="font-mono">{s.externalTrackingNumber}</span>
+                    ) : (
+                      "—"
+                    )
+                  }
+                />
+                {s.externalProvider && (
+                  <Row label="Provider" value={s.externalProvider} />
+                )}
+                {s.externalTrackingId && (
+                  <Row
+                    label="External ID"
+                    value={
+                      <span className="truncate font-mono text-xs">
+                        {s.externalTrackingId}
+                      </span>
+                    }
+                  />
+                )}
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 

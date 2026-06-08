@@ -18,7 +18,9 @@ import { StatusBadge } from "@/components/app/status-badge";
 import { EmptyState } from "@/components/app/empty-state";
 import { PageHeader } from "@/components/app/page-header";
 import { formatCurrency, formatDate } from "@/lib/utils";
-import { Package, Truck, Receipt, FileSignature, ArrowRight } from "lucide-react";
+import { Package, Truck, Receipt, FileSignature, ArrowRight, MapPin } from "lucide-react";
+import { TrackingMap } from "@/app/[locale]/(dashboard)/tracking/tracking-map";
+import { CustomerPortalLiveProvider } from "@/components/app/customer-portal-live";
 
 export default async function PortalDashboardPage({
   params,
@@ -100,8 +102,23 @@ export default async function PortalDashboardPage({
         },
         status: { in: ["ASSIGNED", "PICKED_UP", "IN_TRANSIT"] },
       },
+      include: {
+        orderLinks: {
+          orderBy: { sortOrder: "asc" },
+          include: {
+            order: { select: { customer: { select: { name: true } } } },
+          },
+        },
+        driver: true,
+        stops: { orderBy: { sequence: "asc" } },
+        events: {
+          where: { type: "LOCATION" },
+          orderBy: { at: "desc" },
+          take: 1,
+        },
+      },
       orderBy: { updatedAt: "desc" },
-      take: 5,
+      take: 25,
     }),
   ]);
 
@@ -111,124 +128,150 @@ export default async function PortalDashboardPage({
       Number(outstandingAgg._sum.paid ?? 0),
   );
 
+  type MarkerOut = {
+    id: string;
+    lat: number;
+    lng: number;
+    kind: "pickup" | "dropoff" | "live";
+    label: string;
+    shipmentNumber: string;
+    shipmentId: string;
+    status: string;
+    route?: string;
+    driverName?: string;
+    customerName?: string;
+  };
+  const markers: MarkerOut[] = activeShipments.flatMap((s) => {
+    const last = s.events[0];
+    const pickup = s.stops[0];
+    const dropoff = s.stops[s.stops.length - 1];
+    const driverName = s.driver
+      ? `${s.driver.firstName} ${s.driver.lastName}`.trim()
+      : undefined;
+    const customerName = s.orderLinks[0]?.order.customer.name;
+    const fromLabel = pickup?.city ?? pickup?.address ?? null;
+    const toLabel = dropoff?.city ?? dropoff?.address ?? null;
+    const route =
+      fromLabel && toLabel ? `${fromLabel} → ${toLabel}` : undefined;
+    const common = {
+      shipmentId: s.id,
+      shipmentNumber: s.number,
+      status: s.status,
+      route,
+      driverName,
+      customerName,
+    };
+    const arr: MarkerOut[] = [];
+    if (pickup?.lat != null && pickup.lng != null) {
+      arr.push({
+        id: `${s.id}-p`,
+        lat: pickup.lat,
+        lng: pickup.lng,
+        kind: "pickup",
+        label: customerName ?? "",
+        ...common,
+      });
+    }
+    if (dropoff?.lat != null && dropoff.lng != null) {
+      arr.push({
+        id: `${s.id}-d`,
+        lat: dropoff.lat,
+        lng: dropoff.lng,
+        kind: "dropoff",
+        label: customerName ?? "",
+        ...common,
+      });
+    }
+    if (last?.lat != null && last.lng != null) {
+      arr.push({
+        id: `${s.id}-l`,
+        lat: last.lat,
+        lng: last.lng,
+        kind: "live",
+        label: driverName ?? "",
+        ...common,
+      });
+    }
+    return arr;
+  });
+  const shipmentIds = activeShipments.map((s) => s.id);
+  const mapboxToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN ?? "";
+
+  const recentActiveShipments = activeShipments.slice(0, 5);
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={t("portal.dash.title")}
-        description={
-          session.user.name
-            ? `${t("dashboard.welcome", { name: session.user.name })}`
-            : undefined
-        }
-      />
+    <CustomerPortalLiveProvider shipmentIds={shipmentIds}>
+      <div className="space-y-6">
+        <PageHeader
+          title={t("portal.dash.title")}
+          description={
+            session.user.name
+              ? `${t("dashboard.welcome", { name: session.user.name })}`
+              : undefined
+          }
+        />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label={t("portal.dash.activeOrders")}
-          value={activeOrderCount.toString()}
-          icon={Package}
-          accent="primary"
-        />
-        <StatCard
-          label={t("portal.dash.activeShipments")}
-          value={activeShipmentCount.toString()}
-          icon={Truck}
-          accent="warning"
-        />
-        <StatCard
-          label={t("portal.dash.outstandingBalance")}
-          value={formatCurrency(outstandingBalance, "USD", locale)}
-          icon={Receipt}
-          accent={outstandingBalance > 0 ? "danger" : "success"}
-        />
-        <StatCard
-          label={t("portal.dash.openQuotations")}
-          value={openQuotationCount.toString()}
-          icon={FileSignature}
-          accent="success"
-        />
-      </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <StatCard
+            label={t("portal.dash.activeOrders")}
+            value={activeOrderCount.toString()}
+            icon={Package}
+            accent="primary"
+          />
+          <StatCard
+            label={t("portal.dash.activeShipments")}
+            value={activeShipmentCount.toString()}
+            icon={Truck}
+            accent="warning"
+          />
+          <StatCard
+            label={t("portal.dash.outstandingBalance")}
+            value={formatCurrency(outstandingBalance, "USD", locale)}
+            icon={Receipt}
+            accent={outstandingBalance > 0 ? "danger" : "success"}
+          />
+          <StatCard
+            label={t("portal.dash.openQuotations")}
+            value={openQuotationCount.toString()}
+            icon={FileSignature}
+            accent="success"
+          />
+        </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Recent Orders */}
-        <Card className="lg:col-span-2">
+        {/* Live tracking map */}
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
-              <Package className="h-4 w-4" />
-              {t("portal.dash.recentOrders")}
+              <MapPin className="h-4 w-4" />
+              {t("portal.activeShipmentsMap")}
             </CardTitle>
             <Link
-              href={`/${locale}/portal/orders`}
+              href={`/${locale}/portal/shipments`}
               className="flex items-center gap-1 text-sm text-primary hover:underline"
             >
-              {t("portal.dash.viewAll")}{" "}
-              <ArrowRight className="h-3 w-3" />
+              {t("portal.dash.viewAll")} <ArrowRight className="h-3 w-3" />
             </Link>
           </CardHeader>
-          <CardContent className="p-0">
-            {recentOrders.length === 0 ? (
-              <EmptyState
-                title={t("portal.dash.noOrders")}
-                icon={Package}
-              />
+          <CardContent>
+            {markers.length === 0 ? (
+              <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+                {t("portal.noActiveShipments")}
+              </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>#</TableHead>
-                    <TableHead>{t("common.status")}</TableHead>
-                    <TableHead>{t("shipments.title")}</TableHead>
-                    <TableHead className="text-right">
-                      {t("orders.price")}
-                    </TableHead>
-                    <TableHead>{t("common.date")}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentOrders.map((o) => (
-                    <TableRow key={o.id}>
-                      <TableCell>
-                        <Link
-                          href={`/${locale}/portal/orders/${o.id}`}
-                          className="font-mono text-primary hover:underline"
-                        >
-                          {o.number}
-                        </Link>
-                      </TableCell>
-                      <TableCell>
-                        <StatusBadge status={o.status} kind="order" />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex flex-wrap gap-1.5">
-                          {o.shipmentLinks.map((l) => (
-                            <Link
-                              key={l.shipment.id}
-                              href={`/${locale}/portal/track/${l.shipment.trackingCode}`}
-                              className="rounded-full border px-2 py-0.5 text-xs font-mono hover:bg-accent"
-                            >
-                              {l.shipment.trackingCode}
-                            </Link>
-                          ))}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        {o.price
-                          ? formatCurrency(Number(o.price), o.currency, locale)
-                          : "—"}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {formatDate(o.createdAt, locale)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <TrackingMap
+                markers={markers}
+                mapboxToken={mapboxToken}
+                className="h-[480px] overflow-hidden rounded-2xl border"
+                initialZoom={6}
+                detailHrefBase={`/${locale}/portal/shipments`}
+              />
             )}
           </CardContent>
         </Card>
 
-        {/* Upcoming Invoices */}
-        <Card>
+        <div className="grid gap-4 lg:grid-cols-2">
+          {/* Upcoming Invoices */}
+          <Card>
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="flex items-center gap-2">
               <Receipt className="h-4 w-4" />
@@ -304,7 +347,7 @@ export default async function PortalDashboardPage({
             </Link>
           </CardHeader>
           <CardContent className="p-0">
-            {activeShipments.length === 0 ? (
+            {recentActiveShipments.length === 0 ? (
               <EmptyState
                 title={t("portal.dash.noShipments")}
                 icon={Truck}
@@ -319,11 +362,11 @@ export default async function PortalDashboardPage({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {activeShipments.map((s) => (
+                  {recentActiveShipments.map((s) => (
                     <TableRow key={s.id}>
                       <TableCell>
                         <Link
-                          href={`/${locale}/portal/track/${s.trackingCode}`}
+                          href={`/${locale}/portal/shipments/${s.id}`}
                           className="font-mono text-primary hover:underline"
                         >
                           {s.trackingCode}
@@ -342,7 +385,81 @@ export default async function PortalDashboardPage({
             )}
           </CardContent>
         </Card>
+        </div>
+
+        {/* Recent Orders (moved to the bottom) */}
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="flex items-center gap-2">
+              <Package className="h-4 w-4" />
+              {t("portal.dash.recentOrders")}
+            </CardTitle>
+            <Link
+              href={`/${locale}/portal/orders`}
+              className="flex items-center gap-1 text-sm text-primary hover:underline"
+            >
+              {t("portal.dash.viewAll")} <ArrowRight className="h-3 w-3" />
+            </Link>
+          </CardHeader>
+          <CardContent className="p-0">
+            {recentOrders.length === 0 ? (
+              <EmptyState title={t("portal.dash.noOrders")} icon={Package} />
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>#</TableHead>
+                    <TableHead>{t("common.status")}</TableHead>
+                    <TableHead>{t("shipments.title")}</TableHead>
+                    <TableHead className="text-right">
+                      {t("orders.price")}
+                    </TableHead>
+                    <TableHead>{t("common.date")}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recentOrders.map((o) => (
+                    <TableRow key={o.id}>
+                      <TableCell>
+                        <Link
+                          href={`/${locale}/portal/orders/${o.id}`}
+                          className="font-mono text-primary hover:underline"
+                        >
+                          {o.number}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <StatusBadge status={o.status} kind="order" />
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1.5">
+                          {o.shipmentLinks.map((l) => (
+                            <Link
+                              key={l.shipment.id}
+                              href={`/${locale}/portal/shipments/${l.shipment.id}`}
+                              className="rounded-full border px-2 py-0.5 text-xs font-mono hover:bg-accent"
+                            >
+                              {l.shipment.trackingCode}
+                            </Link>
+                          ))}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {o.price
+                          ? formatCurrency(Number(o.price), o.currency, locale)
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {formatDate(o.createdAt, locale)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       </div>
-    </div>
+    </CustomerPortalLiveProvider>
   );
 }

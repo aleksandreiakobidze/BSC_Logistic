@@ -11,6 +11,7 @@ import {
   OrderStatus,
   CustomerStatus,
   ActivityKind,
+  QuotationActivityKind,
 } from "@/lib/enums";
 import {
   nextQuotationNumber,
@@ -20,6 +21,10 @@ import {
 import { sendEmail } from "@/lib/mail";
 import { Role } from "@/lib/enums";
 import { publishQuotationEvent } from "@/lib/quotation-events";
+import {
+  diffFields,
+  recordQuotationFieldChanges,
+} from "@/lib/quotation-activity-diff";
 
 // ─── Schemas ──────────────────────────────────────────────────────────────────
 
@@ -214,6 +219,15 @@ export async function createQuotationFromLead(
   return { ok: true, id: created.id, number: created.number };
 }
 
+const QUOTATION_HEADER_FIELDS = [
+  "contactId",
+  "currency",
+  "validUntil",
+  "taxRate",
+  "discount",
+  "notes",
+] as const;
+
 export async function updateQuotationHeader(
   id: string,
   input: z.input<typeof updateQuotationHeaderSchema>,
@@ -221,7 +235,19 @@ export async function updateQuotationHeader(
   const { session, orgId } = await requireRole(staffRoles);
   const data = updateQuotationHeaderSchema.parse(input);
 
-  const existing = await loadQuotation(id, orgId);
+  const existing = await prisma.quotation.findFirstOrThrow({
+    where: { id, orgId },
+    select: {
+      id: true,
+      status: true,
+      contactId: true,
+      currency: true,
+      validUntil: true,
+      taxRate: true,
+      discount: true,
+      notes: true,
+    },
+  });
   ensureEditable(existing.status);
 
   await prisma.$transaction(async (tx) => {
@@ -238,6 +264,29 @@ export async function updateQuotationHeader(
       },
     });
     await recomputeQuotationTotals(tx, id);
+
+    const after: Record<string, unknown> = {
+      contactId: data.contactId === undefined ? undefined : data.contactId,
+      currency: data.currency,
+      validUntil:
+        data.validUntil === undefined ? undefined : (data.validUntil ?? null),
+      taxRate: data.taxRate,
+      discount: data.discount,
+      notes: data.notes === undefined ? undefined : (data.notes || null),
+    };
+
+    const changes = diffFields(
+      existing as unknown as Record<string, unknown>,
+      after,
+      QUOTATION_HEADER_FIELDS as unknown as string[],
+    );
+
+    await recordQuotationFieldChanges(tx, {
+      quotationId: id,
+      userId: session.user.id,
+      entity: "Quotation",
+      changes,
+    });
   });
 
   await audit({
@@ -269,7 +318,7 @@ export async function addQuotationLine(
       where: { quotationId },
       _max: { sortOrder: true },
     });
-    await tx.quotationLine.create({
+    const created = await tx.quotationLine.create({
       data: {
         quotationId,
         description: data.description,
@@ -281,6 +330,24 @@ export async function addQuotationLine(
       },
     });
     await recomputeQuotationTotals(tx, quotationId);
+    await tx.quotationActivity.create({
+      data: {
+        quotationId,
+        userId: session.user.id,
+        kind: QuotationActivityKind.FIELD_CHANGE,
+        note: `Added line "${data.description}"`,
+        meta: JSON.stringify({
+          entity: "Line",
+          entityId: created.id,
+          op: "add",
+          line: {
+            description: data.description,
+            quantity: data.quantity,
+            unitPrice: data.unitPrice,
+          },
+        }),
+      },
+    });
   });
 
   await audit({
@@ -300,6 +367,13 @@ export async function addQuotationLine(
   return { ok: true };
 }
 
+const QUOTATION_LINE_FIELDS = [
+  "description",
+  "quantity",
+  "unitPrice",
+  "itemId",
+] as const;
+
 export async function updateQuotationLine(
   lineId: string,
   input: {
@@ -312,7 +386,15 @@ export async function updateQuotationLine(
   const { session, orgId } = await requireRole(staffRoles);
   const line = await prisma.quotationLine.findUniqueOrThrow({
     where: { id: lineId },
-    select: { id: true, quotationId: true, quotation: { select: { status: true, orgId: true } } },
+    select: {
+      id: true,
+      quotationId: true,
+      description: true,
+      quantity: true,
+      unitPrice: true,
+      itemId: true,
+      quotation: { select: { status: true, orgId: true } },
+    },
   });
   if (line.quotation.orgId !== orgId) throw new Error("Forbidden");
   ensureEditable(line.quotation.status);
@@ -328,6 +410,27 @@ export async function updateQuotationLine(
       },
     });
     await recomputeQuotationTotals(tx, line.quotationId);
+
+    const after: Record<string, unknown> = {
+      description: input.description,
+      quantity: input.quantity,
+      unitPrice: input.unitPrice,
+      itemId: input.itemId === undefined ? undefined : (input.itemId || null),
+    };
+
+    const changes = diffFields(
+      line as unknown as Record<string, unknown>,
+      after,
+      QUOTATION_LINE_FIELDS as unknown as string[],
+    );
+
+    await recordQuotationFieldChanges(tx, {
+      quotationId: line.quotationId,
+      userId: session.user.id,
+      entity: `Line "${line.description}"`,
+      entityId: lineId,
+      changes,
+    });
   });
 
   await audit({
@@ -351,7 +454,12 @@ export async function deleteQuotationLine(lineId: string) {
   const { session, orgId } = await requireRole(staffRoles);
   const line = await prisma.quotationLine.findUniqueOrThrow({
     where: { id: lineId },
-    select: { id: true, quotationId: true, quotation: { select: { status: true, orgId: true } } },
+    select: {
+      id: true,
+      quotationId: true,
+      description: true,
+      quotation: { select: { status: true, orgId: true } },
+    },
   });
   if (line.quotation.orgId !== orgId) throw new Error("Forbidden");
   ensureEditable(line.quotation.status);
@@ -359,6 +467,20 @@ export async function deleteQuotationLine(lineId: string) {
   await prisma.$transaction(async (tx) => {
     await tx.quotationLine.delete({ where: { id: lineId } });
     await recomputeQuotationTotals(tx, line.quotationId);
+    await tx.quotationActivity.create({
+      data: {
+        quotationId: line.quotationId,
+        userId: session.user.id,
+        kind: QuotationActivityKind.FIELD_CHANGE,
+        note: `Removed line "${line.description}"`,
+        meta: JSON.stringify({
+          entity: "Line",
+          entityId: lineId,
+          op: "delete",
+          description: line.description,
+        }),
+      },
+    });
   });
 
   await audit({

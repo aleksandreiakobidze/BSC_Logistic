@@ -119,6 +119,7 @@ export default async function PortalShipmentsPage({
                   <TableHead>{t("common.status")}</TableHead>
                   <TableHead>{t("portal.orders.route")}</TableHead>
                   <TableHead>{t("common.date")}</TableHead>
+                  <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -133,7 +134,7 @@ export default async function PortalShipmentsPage({
                     <TableRow key={s.id}>
                       <TableCell>
                         <Link
-                          href={`/${locale}/portal/track/${s.trackingCode}`}
+                          href={`/${locale}/portal/shipments/${s.id}`}
                           className="font-mono text-primary hover:underline"
                         >
                           {s.trackingCode}
@@ -154,6 +155,14 @@ export default async function PortalShipmentsPage({
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {formatDate(s.updatedAt, locale)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Link
+                          href={`/${locale}/portal/track/${s.trackingCode}`}
+                          className="text-xs text-muted-foreground hover:underline"
+                        >
+                          {t("portal.shipments.publicTrack")}
+                        </Link>
                       </TableCell>
                     </TableRow>
                   );

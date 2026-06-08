@@ -105,30 +105,6 @@ export function NewOrderButton({
                 </SelectContent>
               </Select>
             </Field>
-            <Field label="Cargo type">
-              <Input name="cargoType" placeholder="General" />
-            </Field>
-            <Field label="Cargo weight (kg)">
-              <Input name="cargoWeightKg" type="number" />
-            </Field>
-            <Field label="Pickup address" className="sm:col-span-2">
-              <Input name="pickupAddress" required />
-            </Field>
-            <Field label="Pickup city">
-              <Input name="pickupCity" />
-            </Field>
-            <Field label="Pickup country">
-              <Input name="pickupCountry" />
-            </Field>
-            <Field label="Dropoff address" className="sm:col-span-2">
-              <Input name="dropoffAddress" required />
-            </Field>
-            <Field label="Dropoff city">
-              <Input name="dropoffCity" />
-            </Field>
-            <Field label="Dropoff country">
-              <Input name="dropoffCountry" />
-            </Field>
             <Field label={t("common.notes")} className="sm:col-span-2">
               <Textarea name="notes" rows={2} />
             </Field>

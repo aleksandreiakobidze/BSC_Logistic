@@ -514,27 +514,31 @@ model OrderLine {
 }
 
 model Shipment {
-  id                String    @id @default(cuid())
-  orgId             String
-  tripId            String?
-  number            String
-  trackingCode      String    @unique
-  status            String    @default("PLANNED")
-  driverId          String?
-  vehicleId         String?
-  cargoType         String?
-  cargoWeightKg     Float?
-  cargoVolumeM3     Float?
-  temperature       String?
-  plannedDistanceKm Float?
-  actualDistanceKm  Float?
-  plannedStart      DateTime?
-  plannedEnd        DateTime?
-  startedAt         DateTime?
-  completedAt       DateTime?
-  notes             String?
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id                     String    @id @default(cuid())
+  orgId                  String
+  tripId                 String?
+  number                 String
+  trackingCode           String    @unique
+  status                 String    @default("PLANNED")
+  driverId               String?
+  vehicleId              String?
+  cargoType              String?
+  cargoWeightKg          Float?
+  cargoVolumeM3          Float?
+  temperature            String?
+  plannedDistanceKm      Float?
+  actualDistanceKm       Float?
+  plannedStart           DateTime?
+  plannedEnd             DateTime?
+  startedAt              DateTime?
+  completedAt            DateTime?
+  notes                  String?
+  carrier                String?
+  externalTrackingNumber String?
+  externalProvider       String?   @default("aftership")
+  externalTrackingId     String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   organization Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
   trip         Trip?           @relation(fields: [tripId], references: [id], onDelete: SetNull)
@@ -550,6 +554,7 @@ model Shipment {
   @@index([status])
   @@index([driverId])
   @@index([tripId])
+  @@index([externalProvider, externalTrackingNumber])
 }
 
 model ShipmentOrder {
@@ -991,9 +996,17 @@ model Quotation {
   mode                String?
   incoterms           String?
   originPort          String?
+  originPortLat       Float?
+  originPortLng       Float?
   originAddress       String?
+  originAddressLat    Float?
+  originAddressLng    Float?
   destinationPort     String?
+  destinationPortLat  Float?
+  destinationPortLng  Float?
   destinationAddress  String?
+  destinationAddressLat Float?
+  destinationAddressLng Float?
   cargoDescription    String?
   shipmentDetails     String?
   cargoValue          Decimal?

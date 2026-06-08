@@ -19,6 +19,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Incoterms, LeadPriority, QuotationTeam } from "@/lib/enums";
+import {
+  LocationAutocomplete,
+  type LocationValue,
+} from "@/components/app/location-autocomplete";
 import { updateRfqHeader } from "./actions";
 
 type UserOption = { id: string; name: string | null };
@@ -30,9 +34,17 @@ export interface RfqHeader {
   mode: string | null;
   incoterms: string | null;
   originPort: string | null;
+  originPortLat: number | null;
+  originPortLng: number | null;
   originAddress: string | null;
+  originAddressLat: number | null;
+  originAddressLng: number | null;
   destinationPort: string | null;
+  destinationPortLat: number | null;
+  destinationPortLng: number | null;
   destinationAddress: string | null;
+  destinationAddressLat: number | null;
+  destinationAddressLng: number | null;
   cargoDescription: string | null;
   shipmentDetails: string | null;
   cargoValue: number | null;
@@ -93,6 +105,27 @@ export function RfqDetailsCard({
   const [incoterms, setIncoterms] = React.useState(
     header.incoterms ?? NONE_VALUE,
   );
+  const [originPort, setOriginPort] = React.useState<LocationValue>({
+    name: header.originPort ?? "",
+    lat: header.originPortLat,
+    lng: header.originPortLng,
+  });
+  const [originAddress, setOriginAddress] = React.useState<LocationValue>({
+    name: header.originAddress ?? "",
+    lat: header.originAddressLat,
+    lng: header.originAddressLng,
+  });
+  const [destinationPort, setDestinationPort] = React.useState<LocationValue>({
+    name: header.destinationPort ?? "",
+    lat: header.destinationPortLat,
+    lng: header.destinationPortLng,
+  });
+  const [destinationAddress, setDestinationAddress] =
+    React.useState<LocationValue>({
+      name: header.destinationAddress ?? "",
+      lat: header.destinationAddressLat,
+      lng: header.destinationAddressLng,
+    });
 
   const formatDate = React.useMemo(
     () => new Intl.DateTimeFormat(locale, { dateStyle: "medium" }),
@@ -121,10 +154,18 @@ export function RfqDetailsCard({
         priority,
         mode: (fd.get("mode") as string) || null,
         incoterms: incoterms === NONE_VALUE ? null : incoterms,
-        originPort: (fd.get("originPort") as string) || null,
-        originAddress: (fd.get("originAddress") as string) || null,
-        destinationPort: (fd.get("destinationPort") as string) || null,
-        destinationAddress: (fd.get("destinationAddress") as string) || null,
+        originPort: originPort.name || null,
+        originPortLat: originPort.lat,
+        originPortLng: originPort.lng,
+        originAddress: originAddress.name || null,
+        originAddressLat: originAddress.lat,
+        originAddressLng: originAddress.lng,
+        destinationPort: destinationPort.name || null,
+        destinationPortLat: destinationPort.lat,
+        destinationPortLng: destinationPort.lng,
+        destinationAddress: destinationAddress.name || null,
+        destinationAddressLat: destinationAddress.lat,
+        destinationAddressLng: destinationAddress.lng,
         cargoDescription: (fd.get("cargoDescription") as string) || null,
         shipmentDetails: (fd.get("shipmentDetails") as string) || null,
         cargoValue: fd.get("cargoValue")
@@ -271,16 +312,18 @@ export function RfqDetailsCard({
             </Field>
 
             <Field label={t("quotations.inquiry.originPort")}>
-              <Input
-                name="originPort"
-                defaultValue={header.originPort ?? ""}
+              <LocationAutocomplete
+                kind="port"
+                value={originPort}
+                onChange={setOriginPort}
                 disabled={readOnly}
               />
             </Field>
             <Field label={t("quotations.inquiry.destinationPort")}>
-              <Input
-                name="destinationPort"
-                defaultValue={header.destinationPort ?? ""}
+              <LocationAutocomplete
+                kind="port"
+                value={destinationPort}
+                onChange={setDestinationPort}
                 disabled={readOnly}
               />
             </Field>
@@ -289,9 +332,10 @@ export function RfqDetailsCard({
               label={t("quotations.inquiry.originAddress")}
               className="col-span-2"
             >
-              <Input
-                name="originAddress"
-                defaultValue={header.originAddress ?? ""}
+              <LocationAutocomplete
+                kind="address"
+                value={originAddress}
+                onChange={setOriginAddress}
                 disabled={readOnly}
               />
             </Field>
@@ -299,9 +343,10 @@ export function RfqDetailsCard({
               label={t("quotations.inquiry.destinationAddress")}
               className="col-span-2"
             >
-              <Input
-                name="destinationAddress"
-                defaultValue={header.destinationAddress ?? ""}
+              <LocationAutocomplete
+                kind="address"
+                value={destinationAddress}
+                onChange={setDestinationAddress}
                 disabled={readOnly}
               />
             </Field>
